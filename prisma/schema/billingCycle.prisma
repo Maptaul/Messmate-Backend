@@ -23,6 +23,7 @@ model BillingCycle {
   closedBy   User?   @relation("CycleClosedBy", fields: [closedById], references: [id])
 
   meals         MealEntry[]
+  mealPlans     MealPlan[]
   expenses      Expense[]
   deposits      Deposit[]
   groceryDuties GroceryDuty[]

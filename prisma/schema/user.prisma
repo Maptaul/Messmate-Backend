@@ -1,19 +1,19 @@
 model User {
   id String @id @default(uuid())
 
-  name           String       @db.VarChar(120)
-  email          String
-  phone          String?      @db.VarChar(20)
-  password       String?
-  googleId       String?      @unique
-  authProvider   AuthProvider @default(CREDENTIAL)
- 
-  emailVerified  Boolean      @default(false)
-  role           Role         @default(MEMBER)
-  status         UserStatus   @default(ACTIVE)
+  name         String       @db.VarChar(120)
+  email        String
+  phone        String?      @db.VarChar(20)
+  password     String?
+  googleId     String?      @unique
+  authProvider AuthProvider @default(CREDENTIAL)
 
-  avatarUrl      String?      @db.VarChar(500)
-  avatarPublicId String?      @db.VarChar(255)
+  emailVerified Boolean    @default(false)
+  role          Role       @default(MEMBER)
+  status        UserStatus @default(ACTIVE)
+
+  avatarUrl      String? @db.VarChar(500)
+  avatarPublicId String? @db.VarChar(255)
 
   isDeleted Boolean   @default(false)
   deletedAt DateTime?

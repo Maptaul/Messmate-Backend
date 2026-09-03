@@ -21,6 +21,7 @@ model MessMember {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   meals         MealEntry[]
+  mealPlans     MealPlan[]
   groceryDuties GroceryDuty[]
   paidExpenses  Expense[]     @relation("ExpensePaidBy")
   deposits      Deposit[]
