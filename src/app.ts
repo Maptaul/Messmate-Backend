@@ -5,12 +5,12 @@ import express, {
 	type Request,
 	type Response,
 } from "express";
-import rateLimit from "express-rate-limit";
 import helmet from "helmet";
 import httpStatus from "http-status";
 import config from "./app/config";
 import { globalErrorHandler } from "./app/middleware/globalErrorHandler";
 import { notFound } from "./app/middleware/notFound";
+import { authLimiter, generalLimiter } from "./app/middleware/rateLimiter";
 import { AuthRoutes } from "./app/module/auth/auth.route";
 import { MemberRoutes } from "./app/module/member/member.route";
 import { MessRoutes } from "./app/module/mess/mess.route";
@@ -31,42 +31,14 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(cookieParser());
 
-// Auth has its own tighter limiter, and the bKash callback must never be
-// throttled - dropping a gateway call drops a real settlement. Both are skipped
-// here rather than being counted twice against this budget.
-const generalLimiter = rateLimit({
-	windowMs: 15 * 60 * 1000,
-	limit: 300,
-	standardHeaders: "draft-7",
-	legacyHeaders: false,
-	skip: (req) =>
-		req.originalUrl.startsWith("/api/v1/auth") ||
-		req.originalUrl.startsWith("/api/v1/payment/callback"),
-	message: {
-		success: false,
-		statusCode: httpStatus.TOO_MANY_REQUESTS,
-		message: "Too many requests. Please try again later.",
-		errors: [],
-	},
-});
-
-// Login and register are the brute-force targets, so they get a tighter budget.
-const authLimiter = rateLimit({
-	windowMs: 15 * 60 * 1000,
-	limit: 30,
-	standardHeaders: "draft-7",
-	legacyHeaders: false,
-	message: {
-		success: false,
-		statusCode: httpStatus.TOO_MANY_REQUESTS,
-		message: "Too many authentication attempts. Please try again later.",
-		errors: [],
-	},
-});
-
 app.use("/api/v1/auth", authLimiter);
 app.use("/api/v1", generalLimiter);
 
+app.use("/api/v1/auth", AuthRoutes);
+app.use("/api/v1/mess", MessRoutes);
+app.use("/api/v1/member", MemberRoutes);
+
+// Basic route
 app.get("/", async (_req: Request, res: Response) => {
 	res.status(httpStatus.OK).json({
 		success: true,
@@ -79,10 +51,6 @@ app.get("/", async (_req: Request, res: Response) => {
 		},
 	});
 });
-
-app.use("/api/v1/auth", AuthRoutes);
-app.use("/api/v1/mess", MessRoutes);
-app.use("/api/v1/member", MemberRoutes);
 
 app.use(globalErrorHandler);
 app.use(notFound);
