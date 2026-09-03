@@ -120,9 +120,7 @@ const addExpense = async (
 
 	// Optional. Most expenses are entered from memory with no slip to photograph,
 	// so a missing receipt is normal rather than an error.
-	const upload = receipt
-		? await uploadToCloudinary(receipt, "receipts")
-		: null;
+	const upload = receipt ? await uploadToCloudinary(receipt, "receipts") : null;
 
 	return prisma.expense.create({
 		data: {
@@ -347,9 +345,7 @@ const updateExpense = async (
 		}
 	}
 
-	const upload = receipt
-		? await uploadToCloudinary(receipt, "receipts")
-		: null;
+	const upload = receipt ? await uploadToCloudinary(receipt, "receipts") : null;
 
 	const updated = await prisma.expense.update({
 		where: { id: expenseId },

@@ -88,10 +88,7 @@ const loadCycle = async (cycleId: string) => {
  * and rejecting the rest would leave the member unsure what they actually
  * declared.
  */
-const setMealPlan = async (
-	payload: ISetMealPlanPayload,
-	user: RequestUser,
-) => {
+const setMealPlan = async (payload: ISetMealPlanPayload, user: RequestUser) => {
 	const cycle = await loadCycle(payload.cycleId);
 
 	const membership = await checkMessAccess(cycle.messId, user);
@@ -250,7 +247,13 @@ const getMyCalendar = async (cycleId: string, user: RequestUser) => {
 	const plans = await prisma.mealPlan.findMany({
 		where: { cycleId, memberId: membership.id },
 		orderBy: { date: "asc" },
-		select: { id: true, date: true, lunch: true, dinner: true, updatedAt: true },
+		select: {
+			id: true,
+			date: true,
+			lunch: true,
+			dinner: true,
+			updatedAt: true,
+		},
 	});
 
 	const planByDate = new Map(
@@ -258,9 +261,7 @@ const getMyCalendar = async (cycleId: string, user: RequestUser) => {
 	);
 
 	const now = new Date();
-	const totalDays = new Date(
-		Date.UTC(cycle.year, cycle.month, 0),
-	).getUTCDate();
+	const totalDays = new Date(Date.UTC(cycle.year, cycle.month, 0)).getUTCDate();
 
 	// Every day of the month is returned, planned or not, so the client renders
 	// a full calendar instead of a sparse list with holes in it.
@@ -329,7 +330,12 @@ const getCycleCalendar = async (
 			dinner: number;
 			deadline: string;
 			isLocked: boolean;
-			members: { memberId: string; name: string; lunch: number; dinner: number }[];
+			members: {
+				memberId: string;
+				name: string;
+				lunch: number;
+				dinner: number;
+			}[];
 		}
 	>();
 

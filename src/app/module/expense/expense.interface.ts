@@ -1,7 +1,4 @@
-import type {
-	ExpenseType,
-	SplitMethod,
-} from "../../../generated/prisma/enums";
+import type { ExpenseType, SplitMethod } from "../../../generated/prisma/enums";
 
 export interface IAddExpensePayload {
 	cycleId: string;
