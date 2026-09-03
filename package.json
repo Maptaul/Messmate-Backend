@@ -6,7 +6,7 @@
 	"type": "module",
 	"scripts": {
 		"dev": "tsx watch src/server.ts",
-		"build": "prisma generate && prisma migrate deploy",
+		"build": "prisma generate && tsup",
 		"start": "tsx src/server.ts",
 		"typecheck": "tsc --noEmit",
 		"postinstall": "prisma generate",
@@ -63,6 +63,7 @@
 		"@types/node": "^26.1.2",
 		"@types/nodemailer": "^8.0.1",
 		"@types/pg": "^8.20.0",
+		"tsup": "^8.5.1",
 		"typescript": "^7.0.2"
 	},
 	"engines": {

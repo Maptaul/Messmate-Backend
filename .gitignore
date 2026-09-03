@@ -18,3 +18,5 @@ package-lock.json
 # Local editor / tooling directories
 .agents/
 .claude/
+
+.vercel

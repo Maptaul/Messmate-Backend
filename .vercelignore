@@ -1,0 +1,33 @@
+# Vercel uses this file INSTEAD of .gitignore, so everything .gitignore excludes
+# has to be repeated here - otherwise .env and node_modules would be uploaded.
+node_modules
+.env
+.env.*
+!.env.example
+
+# dist/ is deliberately NOT ignored here, unlike in .gitignore. A `builds` array
+# means Vercel never runs the build script, so the bundle vercel.json points at
+# has to travel with the upload. Run `pnpm build` before `vercel --prod`.
+
+/src/generated
+
+yarn.lock
+package-lock.json
+
+.vscode
+.agents/
+.claude/
+.vercel
+
+# The reason this file exists.
+#
+# pnpm-workspace.yaml here holds nothing but `allowBuilds`, a pnpm 10+ key that
+# approves the Prisma and esbuild install scripts locally. Vercel resolves pnpm
+# from the lockfile version and lands on pnpm 9, which reads any
+# pnpm-workspace.yaml as a workspace definition and refuses to install without a
+# `packages` field: "ERROR packages field missing or empty".
+#
+# pnpm 9 does not gate dependency build scripts at all - that started in pnpm 10
+# - so the file has no job to do on Vercel. Keeping it out of the upload lets
+# the build use a plain install, while local pnpm 11 keeps its approvals.
+pnpm-workspace.yaml
