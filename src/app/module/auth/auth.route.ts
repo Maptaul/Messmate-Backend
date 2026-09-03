@@ -14,6 +14,12 @@ router.post(
 );
 
 router.post(
+	"/verify-email",
+	validateRequest(AuthValidation.VerifyEmailZodSchema),
+	AuthController.verifyUserEmail,
+);
+
+router.post(
 	"/login",
 	validateRequest(AuthValidation.LoginZodSchema),
 	AuthController.loginUser,
@@ -28,6 +34,18 @@ router.post(
 router.post("/refresh-token", AuthController.refreshToken);
 
 router.post("/logout", AuthController.logoutUser);
+
+router.post(
+	"/forgot-password",
+	validateRequest(AuthValidation.ForgotPasswordZodSchema),
+	AuthController.forgotPassword,
+);
+
+router.post(
+	"/reset-password",
+	validateRequest(AuthValidation.ResetPasswordZodSchema),
+	AuthController.resetPassword,
+);
 
 router.get(
 	"/me",

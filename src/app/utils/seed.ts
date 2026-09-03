@@ -34,7 +34,9 @@ const seedUser = async ({ name, email, password, role, label }: TSeedUser) => {
 	);
 
 	const user = await prisma.user.create({
-		data: { name, email, password: hashedPassword, role },
+		// Seeded accounts skip the OTP round trip: there is no inbox to check
+		// during a fresh deploy, and the evaluator needs to log in immediately.
+		data: { name, email, password: hashedPassword, role, emailVerified: true },
 	});
 
 	console.log(`${label} Created: ${email}`);

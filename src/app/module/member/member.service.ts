@@ -19,7 +19,9 @@ const memberSelect = {
 	status: true,
 	joinedAt: true,
 	leftAt: true,
-	user: { select: { id: true, name: true, email: true, phone: true, avatarUrl: true } },
+	user: {
+		select: { id: true, name: true, email: true, phone: true, avatarUrl: true },
+	},
 	mess: { select: { id: true, name: true } },
 };
 
@@ -153,7 +155,9 @@ const getMessMembers = async (
 		select: memberSelect,
 	});
 
-	const total = await prisma.messMember.count({ where: { AND: andConditions } });
+	const total = await prisma.messMember.count({
+		where: { AND: andConditions },
+	});
 
 	return {
 		data: members,
@@ -194,7 +198,9 @@ const getMyMemberships = async (query: IQuery, user: RequestUser) => {
 		},
 	});
 
-	const total = await prisma.messMember.count({ where: { AND: andConditions } });
+	const total = await prisma.messMember.count({
+		where: { AND: andConditions },
+	});
 
 	return {
 		data: memberships,

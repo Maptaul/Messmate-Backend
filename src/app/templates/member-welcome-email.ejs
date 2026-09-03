@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Welcome to MessMate</title>
+  <style>
+    body { margin: 0; padding: 0; background: #f4f8fb; color: #263746; font-family: Arial, sans-serif; }
+    .wrapper { width: 100%; padding: 32px 0; }
+    .card { width: 92%; max-width: 600px; margin: 0 auto; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 18px rgba(25, 65, 90, .08); }
+    .header { padding: 28px 36px; background: #087f8c; color: #fff; }
+    .brand { margin: 0; font-size: 24px; font-weight: bold; }
+    .content { padding: 36px; line-height: 1.6; }
+    h1 { margin: 0 0 16px; color: #123c4a; font-size: 28px; }
+    p { margin: 0 0 18px; }
+    .button { display: inline-block; margin: 8px 0 20px; padding: 13px 24px; border-radius: 6px; background: #087f8c; color: #fff !important; text-decoration: none; font-weight: bold; }
+    .footer { padding: 22px 36px; background: #f7fafb; color: #71808a; font-size: 13px; }
+    @media screen and (max-width: 480px) { .content, .header, .footer { padding: 26px 22px; } h1 { font-size: 24px; } }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <div class="card">
+      <header class="header">
+        <p class="brand">MessMate</p>
+      </header>
+      <main class="content">
+        <h1>Welcome, <%= userName || 'there' %>!</h1>
+        <p>Thank you for joining MessMate. Your account has been created successfully.</p>
+        <p>You can now track your daily meals, see how the monthly meal rate is calculated, and settle your share of the groceries, rent and utility bills online.</p>
+        <% if (loginUrl) { %>
+          <a class="button" href="<%= loginUrl %>">Access your account</a>
+        <% } %>
+        <p>If you have any questions, our support team is here to help.</p>
+        <p>Warm regards,<br><strong>The MessMate Team</strong></p>
+      </main>
+      <footer class="footer">
+        <p>This is an automated message. Please do not reply to this email.</p>
+        <p>&copy; <%= new Date().getFullYear() %> MessMate. All rights reserved.</p>
+      </footer>
+    </div>
+  </div>
+</body>
+</html>

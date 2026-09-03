@@ -11,7 +11,7 @@ model Payment {
   paymentGateway        String @default("bkash")
   merchantInvoiceNumber String @unique
 
-  bkashPaymentId String? @unique
+  bkashPaymentId String?   @unique
   bkashTrxId     String?
   payerReference String?
   paidAt         DateTime?

@@ -17,7 +17,14 @@ const RegisterUserZodSchema = z.object({
 	password: passwordSchema,
 	phone: z.string().max(20, "Phone Number Is Too Long").optional(),
 	// ADMIN is deliberately absent: it is seeded, never self-registered.
-	role: z.enum(["MESS_MANAGER", "MEMBER"], "Role Must Be MESS_MANAGER Or MEMBER").optional(),
+	role: z
+		.enum(["MESS_MANAGER", "MEMBER"], "Role Must Be MESS_MANAGER Or MEMBER")
+		.optional(),
+});
+
+const VerifyEmailZodSchema = z.object({
+	email: z.email("Not a valid email"),
+	otp: z.string().length(6, "OTP Must Be 6 Digits"),
 });
 
 const LoginZodSchema = z.object({
@@ -29,8 +36,21 @@ const GoogleLoginZodSchema = z.object({
 	idToken: z.string().min(1, "Google Id Token Is Required"),
 });
 
+const ForgotPasswordZodSchema = z.object({
+	email: z.email("Not a valid email"),
+});
+
+const ResetPasswordZodSchema = z.object({
+	email: z.email("Not a valid email"),
+	newPassword: passwordSchema,
+	otp: z.string().length(6, "OTP Must Be 6 Digits"),
+});
+
 export const AuthValidation = {
 	RegisterUserZodSchema,
+	VerifyEmailZodSchema,
 	LoginZodSchema,
 	GoogleLoginZodSchema,
+	ForgotPasswordZodSchema,
+	ResetPasswordZodSchema,
 };

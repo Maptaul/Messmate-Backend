@@ -1,5 +1,9 @@
 import httpStatus from "http-status";
-import { CycleStatus, MemberStatus, Role } from "../../../generated/prisma/enums";
+import {
+	CycleStatus,
+	MemberStatus,
+	Role,
+} from "../../../generated/prisma/enums";
 import type { MessWhereInput } from "../../../generated/prisma/models";
 import type { IQuery } from "../../interfaces";
 import { prisma } from "../../lib/prisma";

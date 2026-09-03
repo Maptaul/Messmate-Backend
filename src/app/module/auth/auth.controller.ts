@@ -30,7 +30,21 @@ const refreshCookieOptions: CookieOptions = {
 const registerUser = catchAsync(async (req: Request, res: Response) => {
 	const payload = req.body;
 
-	const result = await AuthService.registerUser(payload);
+	await AuthService.registerUser(payload);
+
+	// No tokens yet - the account does not exist until the OTP is confirmed.
+	sendResponse(res, {
+		statusCode: httpStatus.CREATED,
+		success: true,
+		message: "Verification OTP Sent To Your Email",
+		data: null,
+	});
+});
+
+const verifyUserEmail = catchAsync(async (req: Request, res: Response) => {
+	const payload = req.body;
+
+	const result = await AuthService.verifyUserEmail(payload);
 
 	const { accessToken, refreshToken, user } = result;
 
@@ -40,7 +54,7 @@ const registerUser = catchAsync(async (req: Request, res: Response) => {
 	sendResponse(res, {
 		statusCode: httpStatus.CREATED,
 		success: true,
-		message: "User Registered Successfully",
+		message: "Email Verified Successfully",
 		data: {
 			accessToken,
 			refreshToken,
@@ -138,6 +152,32 @@ const googleLogin = catchAsync(async (req: Request, res: Response) => {
 	});
 });
 
+const forgotPassword = catchAsync(async (req: Request, res: Response) => {
+	const payload = req.body;
+
+	await AuthService.forgotPassword(payload);
+
+	sendResponse(res, {
+		statusCode: httpStatus.OK,
+		success: true,
+		message: `OTP Sent To Email : ${payload.email}`,
+		data: null,
+	});
+});
+
+const resetPassword = catchAsync(async (req: Request, res: Response) => {
+	const payload = req.body;
+
+	await AuthService.resetPassword(payload);
+
+	sendResponse(res, {
+		statusCode: httpStatus.OK,
+		success: true,
+		message: "Password Changed Successfully",
+		data: null,
+	});
+});
+
 const logoutUser = catchAsync(async (_req: Request, res: Response) => {
 	// clearCookie only matches when the options match the ones used to set it.
 	res.clearCookie("accessToken", baseCookieOptions);
@@ -153,9 +193,12 @@ const logoutUser = catchAsync(async (_req: Request, res: Response) => {
 
 export const AuthController = {
 	registerUser,
+	verifyUserEmail,
 	loginUser,
 	getMe,
 	refreshToken,
 	googleLogin,
+	forgotPassword,
+	resetPassword,
 	logoutUser,
 };

@@ -1,15 +1,18 @@
 model User {
   id String @id @default(uuid())
 
-  name         String       @db.VarChar(120)
-  email        String
-  phone        String?      @db.VarChar(20)
-  password     String?
-  googleId     String?      @unique
-  authProvider AuthProvider @default(CREDENTIAL)
-  role         Role         @default(MEMBER)
-  status       UserStatus   @default(ACTIVE)
-  avatarUrl    String?      @db.VarChar(500)
+  name          String       @db.VarChar(120)
+  email         String
+  phone         String?      @db.VarChar(20)
+  password      String?
+  googleId      String?      @unique
+  authProvider  AuthProvider @default(CREDENTIAL)
+  // Credential accounts only exist after the OTP is confirmed, so this is true
+  // for every row created through /verify-email and for every Google sign-in.
+  emailVerified Boolean      @default(false)
+  role          Role         @default(MEMBER)
+  status        UserStatus   @default(ACTIVE)
+  avatarUrl     String?      @db.VarChar(500)
 
   isDeleted Boolean   @default(false)
   deletedAt DateTime?
@@ -17,12 +20,12 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  managedMesses  Mess[]         @relation("MessManager")
-  memberships    MessMember[]
-  closedCycles   BillingCycle[] @relation("CycleClosedBy")
-  createdExpenses Expense[]     @relation("ExpenseCreatedBy")
-  createdDeposits Deposit[]     @relation("DepositCreatedBy")
-  auditLogs      AuditLog[]     @relation("AuditActor")
+  managedMesses   Mess[]         @relation("MessManager")
+  memberships     MessMember[]
+  closedCycles    BillingCycle[] @relation("CycleClosedBy")
+  createdExpenses Expense[]      @relation("ExpenseCreatedBy")
+  createdDeposits Deposit[]      @relation("DepositCreatedBy")
+  auditLogs       AuditLog[]     @relation("AuditActor")
 
   @@unique([email])
   @@index([role])
