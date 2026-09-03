@@ -10,10 +10,10 @@
 		"start": "node dist/src/server.js",
 		"check:settlement": "tsx scripts/check-settlement.ts",
 		"test": "echo \"Error: no test specified\" && exit 1",
-		"format:check": "npx @biomejs/biome format ./src",
-		"format:fix": "npx @biomejs/biome format --write ./src",
-		"lint:check": "npx @biomejs/biome lint ./src",
-		"lint:fix": "npx @biomejs/biome lint --write ./src"
+		"format:check": "pnpx @biomejs/biome format ./src",
+		"format:fix": "pnpx @biomejs/biome format --write ./src",
+		"lint:check": "pnpx @biomejs/biome lint ./src",
+		"lint:fix": "pnpx @biomejs/biome lint --write ./src"
 	},
 	"keywords": [
 		"mess",
@@ -29,6 +29,7 @@
 		"@prisma/adapter-pg": "^7.9.1",
 		"@prisma/client": "^7.9.1",
 		"bcryptjs": "^3.0.3",
+		"cloudinary": "^2.11.0",
 		"cookie-parser": "^1.4.7",
 		"cors": "^2.8.6",
 		"date-fns": "^4.4.0",
@@ -39,6 +40,7 @@
 		"helmet": "^8.3.0",
 		"http-status": "^2.1.0",
 		"jsonwebtoken": "^9.0.3",
+		"multer": "^2.3.0",
 		"pg": "^8.22.0",
 		"redis": "^6.2.0",
 		"zod": "^4.4.3"
@@ -49,6 +51,7 @@
 		"@types/cors": "^2.8.19",
 		"@types/express": "^5.0.6",
 		"@types/jsonwebtoken": "^9.0.10",
+		"@types/multer": "^2.2.0",
 		"@types/node": "^26.1.2",
 		"@types/pg": "^8.20.0",
 		"prisma": "^7.9.1",
