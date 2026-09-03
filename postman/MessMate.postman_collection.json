@@ -1,0 +1,1204 @@
+{
+  "info": {
+    "name": "MessMate API",
+    "description": "MessMate - Smart Mess & Shared Housing Management Platform.\n\nLocal: http://localhost:5000 (default)\nChange the `baseUrl` collection variable to point at the deployed API.\n\n## How to use\n\n1. Run the three requests in **Auth / Login** first. Each one saves its own token into a collection variable (`adminToken`, `managerToken`, `memberToken`), so every later request is already authenticated for the right role.\n2. Run **Mess / Create mess** as the manager - it saves `messId`.\n3. Run **Member / Add member** then **Member / Get mess members** - the list saves `memberId`.\n4. The **Error cases** folder is the three-role demo: every request there is expected to fail, with the status noted in its name.\n\n## Seeded accounts\n\n| Role | Email |\n|---|---|\n| ADMIN | admin@messmate.app |\n| MESS_MANAGER | manager@messmate.app |\n| MEMBER | member@messmate.app |\n\nPasswords come from the environment file used at deploy time.\n\n## Registration is two step\n\n`POST /auth/register` does not create the account. It mails a six digit OTP and parks the signup in Redis for five minutes. `POST /auth/verify-email` with that code creates the user and returns tokens. Use the seeded accounts above for everything else, so you do not have to open a mailbox.\n\n## Response shape\n\nSuccess: `{ success, statusCode, message, data, meta? }`\nError: `{ success, statusCode, message, errors: [] }`",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000"
+    },
+    {
+      "key": "adminToken",
+      "value": ""
+    },
+    {
+      "key": "managerToken",
+      "value": ""
+    },
+    {
+      "key": "memberToken",
+      "value": ""
+    },
+    {
+      "key": "adminEmail",
+      "value": "admin@messmate.app"
+    },
+    {
+      "key": "adminPassword",
+      "value": "Admin@messmate12345"
+    },
+    {
+      "key": "managerEmail",
+      "value": "manager@messmate.app"
+    },
+    {
+      "key": "managerPassword",
+      "value": "Manager@messmate12345"
+    },
+    {
+      "key": "memberEmail",
+      "value": "member@messmate.app"
+    },
+    {
+      "key": "memberPassword",
+      "value": "Member@messmate12345"
+    },
+    {
+      "key": "messId",
+      "value": ""
+    },
+    {
+      "key": "memberId",
+      "value": ""
+    },
+    {
+      "key": "otp",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                ""
+              ]
+            },
+            "description": "Confirms the API is up. Returns the standard success envelope."
+          }
+        },
+        {
+          "name": "404 - unknown route (envelope check)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/does-not-exist",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "does-not-exist"
+              ]
+            },
+            "description": "An unmatched path still returns the project error envelope, not an HTML page."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register (step 1 - sends OTP)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Tarek Islam\",\n  \"email\": \"tarek.demo@example.com\",\n  \"password\": \"Tarek@mess123\",\n  \"phone\": \"01700000000\",\n  \"role\": \"MEMBER\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "register"
+              ]
+            },
+            "description": "Does NOT create the user. Hashes the password, parks the signup in Redis for five minutes and mails a six digit OTP.\n\n`role` accepts only MESS_MANAGER or MEMBER. ADMIN is seeded and cannot be self registered."
+          }
+        },
+        {
+          "name": "Verify email (step 2 - creates the user)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"tarek.demo@example.com\",\n  \"otp\": \"{{otp}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/verify-email",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "verify-email"
+              ]
+            },
+            "description": "Paste the OTP from the email into the `otp` collection variable, then send. Creates the account, burns both Redis keys and returns tokens."
+          }
+        },
+        {
+          "name": "Login (Admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res?.data?.accessToken) {",
+                  "  pm.collectionVariables.set('adminToken', res.data.accessToken);",
+                  "  console.log('adminToken saved');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Saves the token into `adminToken` automatically."
+          }
+        },
+        {
+          "name": "Login (Manager)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res?.data?.accessToken) {",
+                  "  pm.collectionVariables.set('managerToken', res.data.accessToken);",
+                  "  console.log('managerToken saved');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{managerEmail}}\",\n  \"password\": \"{{managerPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Saves the token into `managerToken` automatically."
+          }
+        },
+        {
+          "name": "Login (Member)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res?.data?.accessToken) {",
+                  "  pm.collectionVariables.set('memberToken', res.data.accessToken);",
+                  "  console.log('memberToken saved');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{memberEmail}}\",\n  \"password\": \"{{memberPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Saves the token into `memberToken` automatically."
+          }
+        },
+        {
+          "name": "Google login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idToken\": \"PASTE_A_GOOGLE_ID_TOKEN_HERE\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/google",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "google"
+              ]
+            },
+            "description": "Verifies the Google ID token against GOOGLE_CLIENT_ID and issues our own JWT pair. An existing credential account gets its googleId linked; the role is never changed by a social login."
+          }
+        },
+        {
+          "name": "Get me",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "me"
+              ]
+            },
+            "description": "Profile plus memberships and managed messes. The password hash is never included."
+          }
+        },
+        {
+          "name": "Refresh token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"PASTE_REFRESH_TOKEN_OR_RELY_ON_THE_COOKIE\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/refresh-token",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "refresh-token"
+              ]
+            },
+            "description": "Reads the refresh token from the cookie jar, falling back to the body. Claims are rebuilt from the database row, so a role change takes effect on the next refresh."
+          }
+        },
+        {
+          "name": "Forgot password (sends OTP)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{memberEmail}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/forgot-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "forgot-password"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Reset password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{memberEmail}}\",\n  \"otp\": \"{{otp}}\",\n  \"newPassword\": \"Member@messmate12345\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/reset-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "reset-password"
+              ]
+            },
+            "description": "The OTP is deleted the moment it is used, so the same code cannot change a password twice."
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "logout"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Mess",
+      "item": [
+        {
+          "name": "Create mess (Manager)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res?.data?.id) {",
+                  "  pm.collectionVariables.set('messId', res.data.id);",
+                  "  console.log('messId saved:', res.data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"GEC Chattogram Mess\",\n  \"address\": \"GEC Circle, Chattogram\",\n  \"monthlyRent\": 24000\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/mess/create-mess",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "mess",
+                "create-mess"
+              ]
+            },
+            "description": "Creates the mess AND the manager own membership in one transaction. A manager who is not a member would drop out of every settlement.\n\nSaves `messId` automatically."
+          }
+        },
+        {
+          "name": "Get all messes (Admin) - paginated",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/mess/all-messes?page=1&limit=10&sortBy=createdAt&sortOrder=desc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "mess",
+                "all-messes"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "createdAt"
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "desc"
+                },
+                {
+                  "key": "searchTerm",
+                  "value": "chattogram",
+                  "disabled": true
+                },
+                {
+                  "key": "managerId",
+                  "value": "",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Admin only. Supports pagination, search across name and address, filtering by managerId, and sorting. Returns `meta` with page, limit, total and totalPages."
+          }
+        },
+        {
+          "name": "Get my messes",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/mess/my-messes?page=1&limit=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "mess",
+                "my-messes"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "A manager sees what they run; a member sees where they live. Same endpoint, different result per role."
+          }
+        },
+        {
+          "name": "Get single mess",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/mess/{{messId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "mess",
+                "{{messId}}"
+              ]
+            },
+            "description": "Includes member and cycle counts plus the six most recent billing cycles."
+          }
+        },
+        {
+          "name": "Update mess (Manager)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"monthlyRent\": 26000\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/mess/update-mess/{{messId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "mess",
+                "update-mess",
+                "{{messId}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Member",
+      "item": [
+        {
+          "name": "Add member (Manager)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res?.data?.id) {",
+                  "  pm.collectionVariables.set('memberId', res.data.id);",
+                  "  console.log('memberId saved:', res.data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"messId\": \"{{messId}}\",\n  \"email\": \"{{memberEmail}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/member/add-member",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "member",
+                "add-member"
+              ]
+            },
+            "description": "Adds an existing registered user by email.\n\nIf that person left this mess before, the original membership row is restored rather than a second one being inserted - the unique constraint on (messId, userId) means the old row still holds the slot. joinedAt resets, because rent is prorated from it.\n\nSaves `memberId` automatically."
+          }
+        },
+        {
+          "name": "Get mess members - filter and search",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "const managerEmail = pm.collectionVariables.get('managerEmail');",
+                  "// data[0] is the manager, who cannot be removed from their own mess.",
+                  "const removable = (res?.data ?? []).find(m => m.user?.email !== managerEmail);",
+                  "if (removable) {",
+                  "  pm.collectionVariables.set('memberId', removable.id);",
+                  "  console.log('memberId saved:', removable.id);",
+                  "} else {",
+                  "  console.log('no removable member found - run Add member first');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/member/mess-members/{{messId}}?page=1&limit=10&status=ACTIVE",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "member",
+                "mess-members",
+                "{{messId}}"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
+                {
+                  "key": "status",
+                  "value": "ACTIVE"
+                },
+                {
+                  "key": "searchTerm",
+                  "value": "member",
+                  "disabled": true
+                },
+                {
+                  "key": "sortBy",
+                  "value": "joinedAt",
+                  "disabled": true
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "asc",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Filter by status (ACTIVE or LEFT), search across member name and email, sort and paginate."
+          }
+        },
+        {
+          "name": "Get my memberships (Member)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{memberToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/member/my-memberships",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "member",
+                "my-memberships"
+              ]
+            },
+            "description": "A member sees only their own memberships, never anyone else."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Error cases (three role demo)",
+      "description": "Every request here is expected to FAIL. The status code is in the name. This folder is the role isolation demonstration.",
+      "item": [
+        {
+          "name": "401 - no token",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "me"
+              ]
+            }
+          }
+        },
+        {
+          "name": "401 - garbage token",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer not-a-real-token"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "me"
+              ]
+            }
+          }
+        },
+        {
+          "name": "403 - Member calls an Admin route",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{memberToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/mess/all-messes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "mess",
+                "all-messes"
+              ]
+            },
+            "description": "Blocked by auth(Role.ADMIN)."
+          }
+        },
+        {
+          "name": "403 - Manager calls an Admin route",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/mess/all-messes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "mess",
+                "all-messes"
+              ]
+            }
+          }
+        },
+        {
+          "name": "403 - Member tries to create a mess",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{memberToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Not Allowed\",\n  \"address\": \"Nowhere\",\n  \"monthlyRent\": 100\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/mess/create-mess",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "mess",
+                "create-mess"
+              ]
+            }
+          }
+        },
+        {
+          "name": "403 - Member tries to update their own mess",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{memberToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"monthlyRent\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/mess/update-mess/{{messId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "mess",
+                "update-mess",
+                "{{messId}}"
+              ]
+            },
+            "description": "Belonging to a mess is not permission to edit it. This is the second authorization layer: auth() lets the request in, checkMessAccess and the role check inside the service stop it."
+          }
+        },
+        {
+          "name": "403 - Manager B touches Manager A mess",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/mess/PASTE_ANOTHER_MANAGERS_MESS_ID",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "mess",
+                "PASTE_ANOTHER_MANAGERS_MESS_ID"
+              ]
+            },
+            "description": "Register a second manager, create a mess with them, then paste that mess id here. checkMessAccess returns 403 - the whole point of the second authorization layer."
+          }
+        },
+        {
+          "name": "400 - validation, field by field",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"X\",\n  \"email\": \"not-an-email\",\n  \"password\": \"123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "register"
+              ]
+            },
+            "description": "Returns every failing rule as a separate { field, message } entry in `errors`, not just the first one."
+          }
+        },
+        {
+          "name": "400 - role escalation blocked at the schema",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Fake Admin\",\n  \"email\": \"fake.admin@example.com\",\n  \"password\": \"Fake@pass123\",\n  \"role\": \"ADMIN\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "register"
+              ]
+            },
+            "description": "ADMIN is absent from the register enum, so no request can create one. Admins exist only through the seeder."
+          }
+        },
+        {
+          "name": "404 - mess that does not exist",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/mess/00000000-0000-0000-0000-000000000000",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "mess",
+                "00000000-0000-0000-0000-000000000000"
+              ]
+            }
+          }
+        },
+        {
+          "name": "409 - add the same member twice",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"messId\": \"{{messId}}\",\n  \"email\": \"{{memberEmail}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/member/add-member",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "member",
+                "add-member"
+              ]
+            },
+            "description": "Send this twice. The second call returns 409."
+          }
+        },
+        {
+          "name": "400 - admin cannot be a mess member",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"messId\": \"{{messId}}\",\n  \"email\": \"{{adminEmail}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/member/add-member",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "member",
+                "add-member"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Cleanup",
+      "description": "Run last. Removes the demo mess created at the top of the collection.",
+      "item": [
+        {
+          "name": "Remove member (Manager)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/member/remove-member/{{memberId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "member",
+                "remove-member",
+                "{{memberId}}"
+              ]
+            },
+            "description": "Sets status LEFT with leftAt rather than deleting, so their meals and expenses stay attached to the months they belong to and rent stays prorated to the day they left.\n\nRefuses with 409 if they still have an unpaid bill. Writes a MEMBER_REMOVED audit row inside the same transaction.\n\nKept in Cleanup on purpose: it sets the member to LEFT, and the duplicate-add case in Error cases expects them to still be ACTIVE. Running it earlier turns that 409 into a 201, because re-adding someone who left restores their old membership row instead of conflicting."
+          }
+        },
+        {
+          "name": "Delete mess (soft)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/mess/delete-mess/{{messId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "mess",
+                "delete-mess",
+                "{{messId}}"
+              ]
+            },
+            "description": "Sets isDeleted and deletedAt - the row stays in the database. Refuses with 409 while any billing cycle is still OPEN, because deleting would strand every meal and expense recorded in it.\n\nKept last on purpose: it soft-deletes the mess that every Mess and Member request above depends on, so running it earlier makes the rest of the collection return 404."
+          }
+        }
+      ]
+    }
+  ]
+}
