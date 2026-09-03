@@ -36,7 +36,7 @@ Created automatically at server boot by `src/app/utils/seed.ts`.
 | JWT + bcryptjs | Auth + password hashing |
 | Google Identity (`google-auth-library`) | GCP social login |
 | Zod | Request validation |
-| Redis | bKash token cache |
+| Redis | bKash token cache, OTP state, read cache |
 | bKash Tokenized Checkout | Payment |
 | Nodemailer + EJS | OTP and password-reset emails |
 | Cloudinary + Multer | Avatars and expense receipts |
@@ -147,6 +147,36 @@ Money is `Decimal`, never `Float`. Nothing is hard-deleted — `isDeleted` +
 bills so the settlement can be regenerated. An abandoned checkout against a bill
 that no longer exists is noise; a settled one can never reach that path, since
 reopen is refused the moment any payment lands against the month.
+
+---
+
+## ⚡ Caching
+
+Three reads are cached in Redis — the ones that are expensive *and* identical for
+everyone who asks. Everything else is a single indexed query and gains nothing
+from a cache but a second copy of the truth.
+
+| Read | TTL | Dropped when |
+| --- | --- | --- |
+| `/admin/dashboard-stats` | 60 s | never — TTL only |
+| `/grocery-duty/cycle-calendar/:cycleId` | 5 min | a duty is assigned, updated or removed |
+| `/meal-plan/cycle-calendar/:cycleId` | 5 min | anyone declares a meal |
+
+Three rules hold it together:
+
+- **Permission checks stay outside the cache.** `checkMessAccess` runs on every
+  request against the caller's own row; only the shared body is stored.
+- **The clock is never cached.** The meal-plan calendar's `deadline` and
+  `isLocked` are recomputed on every read, including cache hits, so a day can
+  never be shown as still open five minutes after its 11 PM cutoff passed. What
+  Redis actually holds is only `date`, `lunch`, `dinner` and `members`.
+- **Redis is not on the critical path.** Every cache call is wrapped: if Redis is
+  down or slow the loader runs and the caller still gets a correct answer. A
+  cache that can 500 the endpoint it was added to speed up is worse than none.
+
+The dashboard is not invalidated on write — coupling every module in the codebase
+to the admin screen would cost more than a minute of staleness. Measured: ~675 ms
+cold, ~330 ms warm.
 
 ---
 

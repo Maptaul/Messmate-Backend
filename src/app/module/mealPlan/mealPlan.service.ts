@@ -4,6 +4,7 @@ import type { IQuery } from "../../interfaces";
 import { prisma } from "../../lib/prisma";
 import type { RequestUser } from "../../middleware/checkAuth";
 import { AppError } from "../../utils/AppError";
+import { cached, cacheKeys, invalidateCache } from "../../utils/cache";
 import { checkMessAccess } from "../../utils/checkMessAccess";
 import type {
 	IApplyPlanPayload,
@@ -196,8 +197,8 @@ const setMealPlan = async (payload: ISetMealPlanPayload, user: RequestUser) => {
 		}
 	}
 
-	return prisma.$transaction(async (tx) => {
-		const saved = [];
+	const saved = await prisma.$transaction(async (tx) => {
+		const rows = [];
 
 		for (const day of payload.days) {
 			const date = toDateOnly(day.date);
@@ -217,11 +218,17 @@ const setMealPlan = async (payload: ISetMealPlanPayload, user: RequestUser) => {
 				select: planSelect,
 			});
 
-			saved.push(row);
+			rows.push(row);
 		}
 
-		return saved;
+		return rows;
 	});
+
+	// Dropped after the transaction commits, never inside it: a rollback would
+	// otherwise leave the cache cleared for a change that never happened.
+	await invalidateCache(cacheKeys.mealPlanCalendar(cycle.id));
+
+	return saved;
 };
 
 /**
@@ -294,6 +301,91 @@ const getMyCalendar = async (cycleId: string, user: RequestUser) => {
 	};
 };
 
+// Everyone in the mess reads this to see tomorrow's headcount, so it is worth
+// caching - but it is dropped the moment anyone declares, and the TTL is only
+// the backstop. Near the 11 PM cutoff the writes come thick and the cache earns
+// little; the rest of the day it earns plenty.
+const CALENDAR_CACHE_SECONDS = 300;
+
+type TPlanDay = {
+	date: string;
+	lunch: number;
+	dinner: number;
+	members: { memberId: string; name: string; lunch: number; dinner: number }[];
+};
+
+/**
+ * The part that comes out of the database, grouped by day. Deliberately carries
+ * no deadline or lock flag - those depend on the clock, and a cached clock is a
+ * wrong clock.
+ */
+const buildPlanDays = async (
+	cycleId: string,
+	date?: Date,
+): Promise<TPlanDay[]> => {
+	const plans = await prisma.mealPlan.findMany({
+		where: date ? { cycleId, date } : { cycleId },
+		orderBy: [{ date: "asc" }],
+		select: planSelect,
+	});
+
+	const byDate = new Map<string, TPlanDay>();
+
+	for (const plan of plans) {
+		const key = plan.date.toISOString().slice(0, 10);
+
+		if (!byDate.has(key)) {
+			byDate.set(key, { date: key, lunch: 0, dinner: 0, members: [] });
+		}
+
+		const row = byDate.get(key)!;
+		row.lunch += plan.lunch;
+		row.dinner += plan.dinner;
+		row.members.push({
+			memberId: plan.member.id,
+			name: plan.member.user.name,
+			lunch: plan.lunch,
+			dinner: plan.dinner,
+		});
+	}
+
+	return [...byDate.values()];
+};
+
+/**
+ * Stamps each day with its cutoff and whether that cutoff has passed, computed
+ * against the clock right now. This runs on cache hits too, so a day can never
+ * be shown as still open five minutes after it closed.
+ */
+const withDeadlines = (
+	cycle: { id: string; year: number; month: number; status: CycleStatus },
+	days: TPlanDay[],
+) => {
+	const now = new Date();
+
+	return {
+		cycle: {
+			id: cycle.id,
+			year: cycle.year,
+			month: cycle.month,
+			status: cycle.status,
+		},
+		totalPlannedMeals: days.reduce(
+			(sum, day) => sum + day.lunch + day.dinner,
+			0,
+		),
+		days: days.map((day) => {
+			const deadline = planDeadlineFor(new Date(`${day.date}T00:00:00.000Z`));
+
+			return {
+				...day,
+				deadline: formatDeadline(deadline),
+				isLocked: now >= deadline,
+			};
+		}),
+	};
+};
+
 /**
  * What the manager needs before shopping: how many lunches and dinners each day
  * of the month is expected to need, and who is behind those numbers.
@@ -312,76 +404,22 @@ const getCycleCalendar = async (
 	// being able to check it is how members verify the register.
 	await checkMessAccess(cycle.messId, user);
 
-	const where = query.date
-		? { cycleId, date: toDateOnly(new Date(query.date)) }
-		: { cycleId };
-
-	const plans = await prisma.mealPlan.findMany({
-		where,
-		orderBy: [{ date: "asc" }],
-		select: planSelect,
-	});
-
-	const byDate = new Map<
-		string,
-		{
-			date: string;
-			lunch: number;
-			dinner: number;
-			deadline: string;
-			isLocked: boolean;
-			members: {
-				memberId: string;
-				name: string;
-				lunch: number;
-				dinner: number;
-			}[];
-		}
-	>();
-
-	const now = new Date();
-
-	for (const plan of plans) {
-		const key = plan.date.toISOString().slice(0, 10);
-
-		if (!byDate.has(key)) {
-			const deadline = planDeadlineFor(plan.date);
-			byDate.set(key, {
-				date: key,
-				lunch: 0,
-				dinner: 0,
-				deadline: formatDeadline(deadline),
-				isLocked: now >= deadline,
-				members: [],
-			});
-		}
-
-		const row = byDate.get(key)!;
-		row.lunch += plan.lunch;
-		row.dinner += plan.dinner;
-		row.members.push({
-			memberId: plan.member.id,
-			name: plan.member.user.name,
-			lunch: plan.lunch,
-			dinner: plan.dinner,
-		});
+	// A single day is one indexed lookup, so it is left uncached - that also keeps
+	// one key per cycle and one thing to drop on write.
+	if (query.date) {
+		return withDeadlines(
+			cycle,
+			await buildPlanDays(cycleId, toDateOnly(new Date(query.date))),
+		);
 	}
 
-	const days = [...byDate.values()];
+	const days = await cached(
+		cacheKeys.mealPlanCalendar(cycleId),
+		CALENDAR_CACHE_SECONDS,
+		() => buildPlanDays(cycleId),
+	);
 
-	return {
-		cycle: {
-			id: cycle.id,
-			year: cycle.year,
-			month: cycle.month,
-			status: cycle.status,
-		},
-		totalPlannedMeals: days.reduce(
-			(sum, day) => sum + day.lunch + day.dinner,
-			0,
-		),
-		days,
-	};
+	return withDeadlines(cycle, days);
 };
 
 /**

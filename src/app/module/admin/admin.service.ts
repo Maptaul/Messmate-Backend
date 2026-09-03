@@ -17,6 +17,7 @@ import { prisma } from "../../lib/prisma";
 import type { RequestUser } from "../../middleware/checkAuth";
 import { AppError } from "../../utils/AppError";
 import { writeAudit } from "../../utils/audit";
+import { cached, cacheKeys } from "../../utils/cache";
 import type {
 	IChangeRolePayload,
 	IChangeStatusPayload,
@@ -313,93 +314,99 @@ const getAuditLogs = async (query: IQuery) => {
 	};
 };
 
+// A minute-old dashboard is still a true dashboard, and ten aggregates is a lot
+// to repeat for every refresh. Nothing invalidates this on write: coupling every
+// module in the codebase to the admin screen would cost more than the staleness.
+const DASHBOARD_CACHE_SECONDS = 60;
+
 /**
  * Platform health in one call. Every figure is a count or a sum the database
  * already has an index for, and they run together rather than in sequence -
  * a dashboard that takes eight round trips is a dashboard nobody opens.
  */
-const getDashboardStats = async () => {
-	const [
-		usersByRole,
-		blockedUsers,
-		messCount,
-		activeMembers,
-		cyclesByStatus,
-		depositTotal,
-		expenseTotal,
-		settledTotal,
-		outstanding,
-		recentAudits,
-	] = await Promise.all([
-		prisma.user.groupBy({
-			by: ["role"],
-			where: { isDeleted: false },
-			_count: { _all: true },
-		}),
-		prisma.user.count({
-			where: { status: UserStatus.BLOCKED, isDeleted: false },
-		}),
-		prisma.mess.count({ where: { isDeleted: false } }),
-		prisma.messMember.count({
-			where: { status: MemberStatus.ACTIVE, isDeleted: false },
-		}),
-		prisma.billingCycle.groupBy({
-			by: ["status"],
-			_count: { _all: true },
-		}),
-		prisma.deposit.aggregate({
-			where: { isDeleted: false },
-			_sum: { amount: true },
-		}),
-		prisma.expense.aggregate({
-			where: { isDeleted: false },
-			_sum: { amount: true },
-		}),
-		prisma.payment.aggregate({
-			where: { status: PaymentStatus.PAID },
-			_sum: { amount: true },
-		}),
-		prisma.memberBill.aggregate({
-			where: {
-				status: { in: [BillStatus.UNPAID, BillStatus.PARTIAL] },
-				dueAmount: { gt: 0 },
+const getDashboardStats = async () =>
+	cached(cacheKeys.dashboardStats, DASHBOARD_CACHE_SECONDS, async () => {
+		const [
+			usersByRole,
+			blockedUsers,
+			messCount,
+			activeMembers,
+			cyclesByStatus,
+			depositTotal,
+			expenseTotal,
+			settledTotal,
+			outstanding,
+			recentAudits,
+		] = await Promise.all([
+			prisma.user.groupBy({
+				by: ["role"],
+				where: { isDeleted: false },
+				_count: { _all: true },
+			}),
+			prisma.user.count({
+				where: { status: UserStatus.BLOCKED, isDeleted: false },
+			}),
+			prisma.mess.count({ where: { isDeleted: false } }),
+			prisma.messMember.count({
+				where: { status: MemberStatus.ACTIVE, isDeleted: false },
+			}),
+			prisma.billingCycle.groupBy({
+				by: ["status"],
+				_count: { _all: true },
+			}),
+			prisma.deposit.aggregate({
+				where: { isDeleted: false },
+				_sum: { amount: true },
+			}),
+			prisma.expense.aggregate({
+				where: { isDeleted: false },
+				_sum: { amount: true },
+			}),
+			prisma.payment.aggregate({
+				where: { status: PaymentStatus.PAID },
+				_sum: { amount: true },
+			}),
+			prisma.memberBill.aggregate({
+				where: {
+					status: { in: [BillStatus.UNPAID, BillStatus.PARTIAL] },
+					dueAmount: { gt: 0 },
+				},
+				_sum: { dueAmount: true },
+			}),
+			prisma.auditLog.count(),
+		]);
+
+		const countFor = (role: Role) =>
+			usersByRole.find((row) => row.role === role)?._count._all ?? 0;
+
+		const cycleCountFor = (status: CycleStatus) =>
+			cyclesByStatus.find((row) => row.status === status)?._count._all ?? 0;
+
+		return {
+			users: {
+				total: usersByRole.reduce((sum, row) => sum + row._count._all, 0),
+				admins: countFor(Role.ADMIN),
+				managers: countFor(Role.MESS_MANAGER),
+				members: countFor(Role.MEMBER),
+				blocked: blockedUsers,
 			},
-			_sum: { dueAmount: true },
-		}),
-		prisma.auditLog.count(),
-	]);
-
-	const countFor = (role: Role) =>
-		usersByRole.find((row) => row.role === role)?._count._all ?? 0;
-
-	const cycleCountFor = (status: CycleStatus) =>
-		cyclesByStatus.find((row) => row.status === status)?._count._all ?? 0;
-
-	return {
-		users: {
-			total: usersByRole.reduce((sum, row) => sum + row._count._all, 0),
-			admins: countFor(Role.ADMIN),
-			managers: countFor(Role.MESS_MANAGER),
-			members: countFor(Role.MEMBER),
-			blocked: blockedUsers,
-		},
-		messes: {
-			total: messCount,
-			activeMemberships: activeMembers,
-		},
-		cycles: {
-			open: cycleCountFor(CycleStatus.OPEN),
-			closed: cycleCountFor(CycleStatus.CLOSED),
-		},
-		money: {
-			deposits: Number(depositTotal._sum.amount ?? 0),
-			expenses: Number(expenseTotal._sum.amount ?? 0),
-			settledPayments: Number(settledTotal._sum.amount ?? 0),
-			outstandingDue: Number(outstanding._sum.dueAmount ?? 0),
-		},
-		auditLogEntries: recentAudits,
-	};
-};
+			messes: {
+				total: messCount,
+				activeMemberships: activeMembers,
+			},
+			cycles: {
+				open: cycleCountFor(CycleStatus.OPEN),
+				closed: cycleCountFor(CycleStatus.CLOSED),
+			},
+			money: {
+				deposits: Number(depositTotal._sum.amount ?? 0),
+				expenses: Number(expenseTotal._sum.amount ?? 0),
+				settledPayments: Number(settledTotal._sum.amount ?? 0),
+				outstandingDue: Number(outstanding._sum.dueAmount ?? 0),
+			},
+			auditLogEntries: recentAudits,
+		};
+	});
 
 export const AdminServices = {
 	getAllUsers,

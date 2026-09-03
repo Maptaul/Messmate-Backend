@@ -3,6 +3,7 @@ import { CycleStatus, Role } from "../../../generated/prisma/enums";
 import { prisma } from "../../lib/prisma";
 import type { RequestUser } from "../../middleware/checkAuth";
 import { AppError } from "../../utils/AppError";
+import { cached, cacheKeys, invalidateCache } from "../../utils/cache";
 import { checkMessAccess } from "../../utils/checkMessAccess";
 import type {
 	IAssignDutyPayload,
@@ -26,6 +27,11 @@ const toDateOnly = (date: Date) =>
 	new Date(
 		Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
 	);
+
+// The whole mess reads this calendar to see whose turn it is, while the manager
+// books a handful of times a month - so it is dropped on every write and the TTL
+// is only the backstop for a delete that never landed.
+const CALENDAR_CACHE_SECONDS = 300;
 
 /**
  * Only the manager assigns who shops. They live in the mess like everyone
@@ -136,7 +142,7 @@ const assignDuty = async (payload: IAssignDutyPayload, user: RequestUser) => {
 	assertWithinCycle(cycle, startDate, endDate);
 	await assertNoOverlap(cycle.id, startDate, endDate);
 
-	return prisma.groceryDuty.create({
+	const duty = await prisma.groceryDuty.create({
 		data: {
 			cycleId: cycle.id,
 			memberId: payload.memberId,
@@ -146,6 +152,10 @@ const assignDuty = async (payload: IAssignDutyPayload, user: RequestUser) => {
 		},
 		select: dutySelect,
 	});
+
+	await invalidateCache(cacheKeys.groceryDutyCalendar(cycle.id));
+
+	return duty;
 };
 
 const getCycleDuties = async (cycleId: string, user: RequestUser) => {
@@ -186,35 +196,47 @@ const getCycleCalendar = async (cycleId: string, user: RequestUser) => {
 
 	await checkMessAccess(cycle.messId, user);
 
-	const duties = await prisma.groceryDuty.findMany({
-		where: { cycleId },
-		orderBy: { startDate: "asc" },
-		select: dutySelect,
-	});
+	// Cached below the access check on purpose: who may read this is decided per
+	// caller on every request, and only the calendar body is shared between them.
+	return cached(
+		cacheKeys.groceryDutyCalendar(cycleId),
+		CALENDAR_CACHE_SECONDS,
+		async () => {
+			const duties = await prisma.groceryDuty.findMany({
+				where: { cycleId },
+				orderBy: { startDate: "asc" },
+				select: dutySelect,
+			});
 
-	const totalDays = new Date(Date.UTC(cycle.year, cycle.month, 0)).getUTCDate();
+			const totalDays = new Date(
+				Date.UTC(cycle.year, cycle.month, 0),
+			).getUTCDate();
 
-	const days = Array.from({ length: totalDays }, (_, index) => {
-		const date = new Date(Date.UTC(cycle.year, cycle.month - 1, index + 1));
+			const days = Array.from({ length: totalDays }, (_, index) => {
+				const date = new Date(Date.UTC(cycle.year, cycle.month - 1, index + 1));
 
-		const duty = duties.find((d) => date >= d.startDate && date <= d.endDate);
+				const duty = duties.find(
+					(d) => date >= d.startDate && date <= d.endDate,
+				);
 
-		return {
-			date: date.toISOString().slice(0, 10),
-			memberId: duty?.member.id ?? null,
-			memberName: duty?.member.user.name ?? null,
-		};
-	});
+				return {
+					date: date.toISOString().slice(0, 10),
+					memberId: duty?.member.id ?? null,
+					memberName: duty?.member.user.name ?? null,
+				};
+			});
 
-	return {
-		cycle: {
-			id: cycle.id,
-			year: cycle.year,
-			month: cycle.month,
-			status: cycle.status,
+			return {
+				cycle: {
+					id: cycle.id,
+					year: cycle.year,
+					month: cycle.month,
+					status: cycle.status,
+				},
+				days,
+			};
 		},
-		days,
-	};
+	);
 };
 
 /**
@@ -332,7 +354,7 @@ const updateDuty = async (
 		await assertNoOverlap(duty.cycleId, startDate, endDate, duty.id);
 	}
 
-	return prisma.groceryDuty.update({
+	const updated = await prisma.groceryDuty.update({
 		where: { id: dutyId },
 		data: {
 			memberId: payload.memberId,
@@ -342,12 +364,16 @@ const updateDuty = async (
 		},
 		select: dutySelect,
 	});
+
+	await invalidateCache(cacheKeys.groceryDutyCalendar(duty.cycleId));
+
+	return updated;
 };
 
 const removeDuty = async (dutyId: string, user: RequestUser) => {
 	const duty = await prisma.groceryDuty.findUnique({
 		where: { id: dutyId },
-		select: { id: true, cycle: { select: { messId: true } } },
+		select: { id: true, cycleId: true, cycle: { select: { messId: true } } },
 	});
 
 	if (!duty) {
@@ -366,6 +392,8 @@ const removeDuty = async (dutyId: string, user: RequestUser) => {
 	// Hard delete: a rota entry carries no financial history the way a meal or
 	// an expense does, so there is nothing here that soft delete needs to keep.
 	await prisma.groceryDuty.delete({ where: { id: dutyId } });
+
+	await invalidateCache(cacheKeys.groceryDutyCalendar(duty.cycleId));
 
 	return { id: dutyId };
 };
