@@ -14,6 +14,7 @@ import { authLimiter, generalLimiter } from "./app/middleware/rateLimiter";
 import { AuthRoutes } from "./app/module/auth/auth.route";
 import { MemberRoutes } from "./app/module/member/member.route";
 import { MessRoutes } from "./app/module/mess/mess.route";
+import { UserRoutes } from "./app/module/user/user.route";
 
 const app: Application = express();
 
@@ -37,6 +38,7 @@ app.use("/api/v1", generalLimiter);
 app.use("/api/v1/auth", AuthRoutes);
 app.use("/api/v1/mess", MessRoutes);
 app.use("/api/v1/member", MemberRoutes);
+app.use("/api/v1/user", UserRoutes);
 
 // Basic route
 app.get("/", async (_req: Request, res: Response) => {

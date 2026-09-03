@@ -455,6 +455,105 @@
       ]
     },
     {
+      "name": "User",
+      "description": "Profile and profile image. The image is optional throughout - avatarUrl and avatarPublicId are nullable, and an account with no picture is normal.",
+      "item": [
+        {
+          "name": "Update profile",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{memberToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Tazjim Arman\",\n  \"phone\": \"01812345678\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/user/update-profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "user",
+                "update-profile"
+              ]
+            },
+            "description": "Name and phone only. Email, role and status are not editable here - changing a role is an admin action, not a profile edit."
+          }
+        },
+        {
+          "name": "Upload profile image",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{memberToken}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "avatar",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/user/profile-image",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "user",
+                "profile-image"
+              ]
+            },
+            "description": "Multipart form-data with a file in the `avatar` field. Max 5 MB, held in memory and streamed straight to Cloudinary.\n\nReplacing a picture deletes the previous file, but only after the new one is saved - doing it first would leave the account with no picture if the upload then failed.\n\nIn Postman: Body tab -> form-data -> key `avatar`, change the type dropdown from Text to File, then pick an image."
+          }
+        },
+        {
+          "name": "Remove profile image",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{memberToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/user/profile-image",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "user",
+                "profile-image"
+              ]
+            },
+            "description": "Clears avatarUrl and avatarPublicId and deletes the file from Cloudinary. Returns 404 if there was no picture to begin with."
+          }
+        }
+      ]
+    },
+    {
       "name": "Mess",
       "item": [
         {

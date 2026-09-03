@@ -9,6 +9,11 @@ model Expense {
   description String?     @db.VarChar(500)
   spentAt     DateTime
 
+  // Optional photo of the grocery slip or utility bill. Nullable because most
+  // expenses are entered from memory, without a receipt to hand.
+  receiptUrl      String? @db.VarChar(500)
+  receiptPublicId String? @db.VarChar(255)
+
   isDeleted Boolean   @default(false)
   deletedAt DateTime?
 

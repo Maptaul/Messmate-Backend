@@ -1,5 +1,4 @@
-// Who changed what. Written inside the transaction it describes, so an audit
-// row for a rolled-back action can never exist.
+
 model AuditLog {
   id String @id @default(uuid())
 
