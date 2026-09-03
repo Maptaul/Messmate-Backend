@@ -96,6 +96,18 @@
     {
       "key": "runId",
       "value": ""
+    },
+    {
+      "key": "adminUserId",
+      "value": ""
+    },
+    {
+      "key": "managerUserId",
+      "value": ""
+    },
+    {
+      "key": "targetUserId",
+      "value": ""
     }
   ],
   "item": [
@@ -2300,6 +2312,413 @@
               ]
             },
             "description": "A well-formed id that belongs to nothing."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "description": "Platform administration — everything here is ADMIN only, because none of it is about one mess.\n\nThe two state-changing pairs (role there and back, block then unblock) are deliberately round trips: leaving the demo member promoted or blocked would break every request after this folder. If a run stops between the two halves of a pair, re-run the second half by hand.",
+      "item": [
+        {
+          "name": "Dashboard stats",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/dashboard-stats",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "dashboard-stats"
+              ]
+            },
+            "description": "Platform health in one call: users by role, blocked count, messes and active memberships, open and closed cycles, and the money — deposits taken, expenses recorded, payments actually settled through bKash, and what is still outstanding across every unpaid bill.\n\nEvery figure is a count or a sum with an index behind it, and they run together rather than in sequence. A dashboard that costs ten round trips is a dashboard nobody opens."
+          }
+        },
+        {
+          "name": "Get all users - search, sort, paginate",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/users?page=1&limit=50&searchTerm=messmate&sortBy=createdAt&sortOrder=asc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "50"
+                },
+                {
+                  "key": "searchTerm",
+                  "value": "messmate"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "createdAt"
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "asc"
+                }
+              ]
+            },
+            "description": "`searchTerm` matches name or email case-insensitively. Passwords are never selected, so they cannot leak through this route even by accident.\n\nSaves the three demo user ids the requests below act on."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "const byEmail = (email) => res?.data?.find((u) => u.email === email);",
+                  "const admin = byEmail(pm.collectionVariables.get(\"adminEmail\"));",
+                  "const manager = byEmail(pm.collectionVariables.get(\"managerEmail\"));",
+                  "const member = byEmail(pm.collectionVariables.get(\"memberEmail\"));",
+                  "if (admin) pm.collectionVariables.set(\"adminUserId\", admin.id);",
+                  "if (manager) pm.collectionVariables.set(\"managerUserId\", manager.id);",
+                  "if (member) pm.collectionVariables.set(\"targetUserId\", member.id);",
+                  "console.log(\"admin/manager/member ids saved\");"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get all users - filter by role and status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/users?role=MEMBER&status=ACTIVE&limit=5",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "role",
+                  "value": "MEMBER"
+                },
+                {
+                  "key": "status",
+                  "value": "ACTIVE"
+                },
+                {
+                  "key": "limit",
+                  "value": "5"
+                }
+              ]
+            },
+            "description": "The same endpoint narrowed by role and account status. Soft-deleted users are excluded from every variation."
+          }
+        },
+        {
+          "name": "Get single user - with their messes",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/users/{{managerUserId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "users",
+                "{{managerUserId}}"
+              ]
+            },
+            "description": "Returns the messes this user manages and the memberships they hold, because that is what an admin needs before acting: a manager with an open month and a member with an unpaid bill are not the same person to act on."
+          }
+        },
+        {
+          "name": "Change role - promote to MESS_MANAGER",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"MESS_MANAGER\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/users/{{targetUserId}}/role",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "users",
+                "{{targetUserId}}",
+                "role"
+              ]
+            },
+            "description": "Writes a `USER_ROLE_CHANGED` audit row carrying the before and after role. The role is read from the database on every request, not from the token, so the change takes effect on the user's very next call without them logging in again."
+          }
+        },
+        {
+          "name": "Change role - back to MEMBER",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"MEMBER\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/users/{{targetUserId}}/role",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "users",
+                "{{targetUserId}}",
+                "role"
+              ]
+            },
+            "description": "The other half of the round trip. Leaving the demo member promoted would change what every request after this folder is allowed to do."
+          }
+        },
+        {
+          "name": "Block a user",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"BLOCKED\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/users/{{targetUserId}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "users",
+                "{{targetUserId}}",
+                "status"
+              ]
+            },
+            "description": "A blocked account is refused at login and on every authenticated request, since the middleware checks the database row rather than trusting the token. Writes a `USER_BLOCKED` audit row."
+          }
+        },
+        {
+          "name": "Unblock a user",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"ACTIVE\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/users/{{targetUserId}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "users",
+                "{{targetUserId}}",
+                "status"
+              ]
+            },
+            "description": "Writes `USER_UNBLOCKED`. Run this even if you ran the block by hand — every request below this folder logs in as that member."
+          }
+        },
+        {
+          "name": "Get audit logs - the trail, filtered",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/audit-logs?limit=10&entity=User",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "audit-logs"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
+                {
+                  "key": "entity",
+                  "value": "User"
+                }
+              ]
+            },
+            "description": "Everything money- or permission-shaped is written here as it happens — cycle closed and reopened, member removed, expense and deposit deleted, payment settled, role changed, user blocked and unblocked — each with the actor and the before/after state.\n\nFilterable by `action`, `entity`, `entityId` and `actorId`. A log that is written but never readable is only half a feature; this is the other half."
+          }
+        },
+        {
+          "name": "403 - an admin cannot change their own role",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"MEMBER\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/users/{{adminUserId}}/role",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "users",
+                "{{adminUserId}}",
+                "role"
+              ]
+            },
+            "description": "Self-demotion would lock the platform's last way in. The same guard covers blocking yourself."
+          }
+        },
+        {
+          "name": "409 - demote a manager who still owns a mess",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"MEMBER\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/users/{{managerUserId}}/role",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "users",
+                "{{managerUserId}}",
+                "role"
+              ]
+            },
+            "description": "A demoted manager keeps owning the mess row but loses every route that maintains it — the month could no longer be closed and the ledger would sit there unfinishable. Hand the mess over or delete it first.\n\nThe matching rule for blocking: a manager cannot be blocked while one of their messes has an OPEN cycle, because nobody else can record the meals or close it."
           }
         }
       ]

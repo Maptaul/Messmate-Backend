@@ -48,7 +48,7 @@ Created automatically at server boot by `src/app/utils/seed.ts`.
 
 | Role | Can do |
 | --- | --- |
-| **ADMIN** | Platform operator. All messes and users, role changes, blocks, audit logs, statistics, force-reopen a closed cycle. |
+| **ADMIN** | Platform operator. All messes and users, role changes, block/unblock, audit-log trail, dashboard stats, force-reopen a closed cycle. Never a resident of any mess. |
 | **MESS_MANAGER** | Owns messes. Members, meals, expenses, deposits, grocery-duty bookings, and closing the month — for their own messes only. |
 | **MEMBER** | Declares their own meal plan, pays their own bill, and reads the shared ledger — meals, expenses, deposits and duty for the whole mess, because it is the mess's money. Writes nothing but their own plan. |
 
@@ -167,6 +167,26 @@ All under `/api/v1`. The Postman collection is the full reference — this is th
 | `/grocery-duty` | Booking a member for a date range, the day-by-day calendar, per-member totals |
 | `/deposit` | Cash handed to the manager before there is a bill — becomes credit |
 | `/payment` | Bills, bKash checkout, and the callback |
+| `/admin` | Users, role changes, block/unblock, the audit-log trail, dashboard stats |
+
+### Admin operations
+
+Two guards are worth naming, because both come from the domain rather than from
+a permissions table:
+
+- **A manager cannot be demoted while they still own a mess.** They would keep the
+  mess row but lose every route that maintains it — the month could no longer be
+  closed and the ledger would sit there unfinishable.
+- **A manager cannot be blocked while one of their messes has an OPEN cycle.**
+  Nobody else can record that month's meals or close it, so blocking them mid-month
+  strands the whole mess. An admin also cannot change their own role or status;
+  self-demotion would remove the platform's last way back in.
+
+`GET /admin/audit-logs` reads back what every other module writes — cycle closed
+and reopened, member removed, expense and deposit deleted, payment settled, role
+changed, user blocked and unblocked — each row carrying the actor and the
+before/after state, filterable by action, entity or actor. A log that is written
+but never readable is only half a feature.
 
 ---
 
@@ -272,7 +292,7 @@ Every endpoint returns the same envelope.
 
 ## 📮 Postman
 
-`postman/MessMate.postman_collection.json` — **80 requests across 14 folders**.
+`postman/MessMate.postman_collection.json` — **91 requests across 15 folders**.
 Import it, set `baseUrl`, and run the whole thing top to bottom: tokens, `messId`,
 `cycleId`, `billId` and `paymentId` all chain themselves through the requests'
 test scripts.
@@ -288,8 +308,12 @@ be picked by hand (avatar, receipt), an OTP or refresh token pasted, or the bKas
 hosted page actually paid. Everything else passes:
 
 ```
-=== pass 72 | fail 0 | manual 8 | error 0 | total 80 ===
+=== pass 83 | fail 0 | manual 8 | error 0 | total 91 ===
 ```
+
+The Admin folder's two state-changing pairs are round trips — role there and
+back, block then unblock — because leaving the demo member promoted or blocked
+would break every request after it.
 
 The mess name carries a per-run stamp, so the collection is re-runnable rather
 than one-shot. Note that `/auth` allows 30 requests per 15 minutes and a full run
@@ -318,7 +342,8 @@ Feature-complete — see `.agents/` for the conventions this repo follows.
 - [x] Mess, member, cycle, meal, meal plan, expense, deposit, grocery duty
 - [x] Settlement + cycle close transaction
 - [x] bKash payment + idempotent callback
-- [x] Postman collection — 80 requests, verified end to end against a live server
+- [x] Admin operations — users, roles, block/unblock, audit-log read, dashboard stats
+- [x] Postman collection — 91 requests, verified end to end against a live server
 - [ ] Deployment and demo video
 
 ---

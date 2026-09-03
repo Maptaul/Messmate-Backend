@@ -11,6 +11,7 @@ import config from "./app/config";
 import { globalErrorHandler } from "./app/middleware/globalErrorHandler";
 import { notFound } from "./app/middleware/notFound";
 import { authLimiter, generalLimiter } from "./app/middleware/rateLimiter";
+import { AdminRoutes } from "./app/module/admin/admin.route";
 import { AuthRoutes } from "./app/module/auth/auth.route";
 import { CycleRoutes } from "./app/module/cycle/cycle.route";
 import { DepositRoutes } from "./app/module/deposit/deposit.route";
@@ -53,6 +54,7 @@ app.use("/api/v1/expense", ExpenseRoutes);
 app.use("/api/v1/grocery-duty", GroceryDutyRoutes);
 app.use("/api/v1/deposit", DepositRoutes);
 app.use("/api/v1/payment", PaymentRoutes);
+app.use("/api/v1/admin", AdminRoutes);
 
 // Basic route
 app.get("/", async (_req: Request, res: Response) => {
