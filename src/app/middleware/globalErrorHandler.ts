@@ -38,12 +38,14 @@ export const globalErrorHandler = async (
 		// validateRequest converts most Zod failures into an AppError first, so
 		// this branch catches schemas parsed directly inside a service.
 		statusCode = httpStatus.BAD_REQUEST;
-		errorMessage = "Validation failed";
 		isKnownError = true;
 		errors = err.issues.map((issue) => ({
 			field: issue.path.join("."),
 			message: issue.message,
 		}));
+		// Lead with the first problem so the message alone is actionable, and keep
+		// the full list in errors.
+		errorMessage = errors[0]?.message ?? "Validation failed";
 	} else if (err instanceof AppError) {
 		statusCode = err.statusCode;
 		errorMessage = err.message;
