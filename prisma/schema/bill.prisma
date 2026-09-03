@@ -1,0 +1,32 @@
+// Produced by the cycle-close settlement. One row per member per cycle.
+// dueAmount may be NEGATIVE — that means the mess owes the member, because they
+// fronted more bazar money than they consumed. Never clamp it to zero.
+model MemberBill {
+  id String @id @default(uuid())
+
+  mealCount    Int
+  mealCost     Decimal @db.Decimal(12, 2)
+  sharedCost   Decimal @db.Decimal(12, 2)
+  rentShare    Decimal @db.Decimal(12, 2)
+  totalPayable Decimal @db.Decimal(12, 2)
+  creditAmount Decimal @db.Decimal(12, 2) // deposits + expenses this member paid
+  paidAmount   Decimal @db.Decimal(12, 2) @default(0)
+  dueAmount    Decimal @db.Decimal(12, 2)
+
+  status BillStatus @default(UNPAID)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  cycleId String
+  cycle   BillingCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  memberId String
+  member   MessMember @relation(fields: [memberId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  payments Payment[]
+
+  @@unique([cycleId, memberId])
+  @@index([status])
+  @@map("member_bills")
+}

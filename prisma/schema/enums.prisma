@@ -1,0 +1,66 @@
+enum Role {
+  ADMIN
+  MESS_MANAGER
+  MEMBER
+}
+
+enum UserStatus {
+  ACTIVE
+  BLOCKED
+}
+
+enum AuthProvider {
+  CREDENTIAL
+  GOOGLE
+}
+
+enum MemberStatus {
+  ACTIVE
+  LEFT
+}
+
+enum CycleStatus {
+  OPEN
+  CLOSED
+}
+
+enum ExpenseType {
+  GROCERY
+  GAS
+  ELECTRICITY
+  WATER
+  INTERNET
+  MAID
+  RENT
+  OTHER
+}
+
+enum SplitMethod {
+  EQUAL
+  BY_MEAL
+}
+
+enum BillStatus {
+  UNPAID
+  PARTIAL
+  PAID
+}
+
+enum PaymentStatus {
+  UNPAID
+  PAID
+  FAILED
+  CANCELLED
+  REFUNDED
+}
+
+enum AuditAction {
+  CYCLE_CLOSED
+  CYCLE_REOPENED
+  PAYMENT_SETTLED
+  USER_ROLE_CHANGED
+  USER_BLOCKED
+  USER_UNBLOCKED
+  MEMBER_REMOVED
+  EXPENSE_DELETED
+}
