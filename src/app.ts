@@ -28,11 +28,17 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(cookieParser());
 
+// Auth has its own tighter limiter, and the bKash callback must never be
+// throttled - dropping a gateway call drops a real settlement. Both are skipped
+// here rather than being counted twice against this budget.
 const generalLimiter = rateLimit({
 	windowMs: 15 * 60 * 1000,
 	limit: 300,
 	standardHeaders: "draft-7",
 	legacyHeaders: false,
+	skip: (req) =>
+		req.originalUrl.startsWith("/api/v1/auth") ||
+		req.originalUrl.startsWith("/api/v1/payment/callback"),
 	message: {
 		success: false,
 		statusCode: httpStatus.TOO_MANY_REQUESTS,
@@ -55,9 +61,6 @@ const authLimiter = rateLimit({
 	},
 });
 
-// The bKash callback is deliberately exempt — throttling the gateway would drop
-// a real settlement.
-app.use("/api/v1/payment/callback", (_req, _res, next) => next());
 app.use("/api/v1/auth", authLimiter);
 app.use("/api/v1", generalLimiter);
 
