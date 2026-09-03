@@ -1,0 +1,33 @@
+// A person living in a mess. Kept separate from User because the same person
+// can join, leave, and rejoin, and every meal, bill and payment hangs off the
+// membership rather than the account.
+model MessMember {
+  id String @id @default(uuid())
+
+  status   MemberStatus @default(ACTIVE)
+  joinedAt DateTime     @default(now())
+  leftAt   DateTime?
+
+  isDeleted Boolean   @default(false)
+  deletedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  messId String
+  mess   Mess   @relation(fields: [messId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  meals         MealEntry[]
+  groceryDuties GroceryDuty[]
+  paidExpenses  Expense[]     @relation("ExpensePaidBy")
+  deposits      Deposit[]
+  bills         MemberBill[]
+  payments      Payment[]
+
+  @@unique([messId, userId])
+  @@index([messId, status])
+  @@map("mess_members")
+}

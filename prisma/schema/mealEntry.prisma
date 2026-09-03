@@ -1,5 +1,5 @@
-// One row per member per day. Counts, not booleans, so guest meals work.
-// Breakfast is not tracked — this mess eats lunch and dinner only.
+// One row per member per day. Counts rather than booleans, so guest meals work.
+// Breakfast is not tracked - this mess eats lunch and dinner only.
 model MealEntry {
   id String @id @default(uuid())
 

@@ -1,0 +1,23 @@
+// Whose turn it is to do the grocery shopping, rotated through the members.
+// Duty is separate from who actually paid - the money side lives on
+// Expense.paidByMemberId, because the person on duty is not always the one
+// who fronts the cash.
+model GroceryDuty {
+  id String @id @default(uuid())
+
+  startDate DateTime @db.Date
+  endDate   DateTime @db.Date
+  note      String?  @db.VarChar(300)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  cycleId String
+  cycle   BillingCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  memberId String
+  member   MessMember @relation(fields: [memberId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([cycleId, startDate])
+  @@map("grocery_duties")
+}

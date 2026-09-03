@@ -1,6 +1,6 @@
 // Produced by the cycle-close settlement. One row per member per cycle.
-// dueAmount may be NEGATIVE — that means the mess owes the member, because they
-// fronted more bazar money than they consumed. Never clamp it to zero.
+// dueAmount may be NEGATIVE - that means the mess owes the member, because they
+// fronted more grocery money than they consumed. Never clamp it to zero.
 model MemberBill {
   id String @id @default(uuid())
 
@@ -10,7 +10,7 @@ model MemberBill {
   rentShare    Decimal @db.Decimal(12, 2)
   totalPayable Decimal @db.Decimal(12, 2)
   creditAmount Decimal @db.Decimal(12, 2) // deposits + expenses this member paid
-  paidAmount   Decimal @db.Decimal(12, 2) @default(0)
+  paidAmount   Decimal @default(0) @db.Decimal(12, 2)
   dueAmount    Decimal @db.Decimal(12, 2)
 
   status BillStatus @default(UNPAID)
