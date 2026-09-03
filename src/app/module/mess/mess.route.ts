@@ -35,7 +35,6 @@ router.delete(
 	MessController.deleteMess,
 );
 
-// Keep the wildcard last so /all-messes and /my-messes are not swallowed by it.
 router.get(
 	"/:messId",
 	auth(Role.ADMIN, Role.MESS_MANAGER, Role.MEMBER),

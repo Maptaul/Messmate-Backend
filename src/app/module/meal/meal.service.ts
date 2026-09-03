@@ -24,9 +24,6 @@ const mealSelect = {
 	},
 };
 
-// The column is a DATE, and the unique key is (memberId, date). Anything with a
-// time component would slip past that constraint and let one day be recorded
-// twice, so every date is flattened to UTC midnight before it is used.
 const toDateOnly = (date: Date) =>
 	new Date(
 		Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
@@ -61,14 +58,6 @@ const loadOpenCycle = async (cycleId: string, user: RequestUser) => {
 	return cycle;
 };
 
-/**
- * Records one day for the whole mess in a single request.
- *
- * The manager fills the register once a day for everyone, so this takes a date
- * and a list of members rather than one call per person. Every entry is written
- * in one transaction: a half-recorded day would quietly skew the month rate for
- * everyone, since the rate divides the grocery bill by the meal total.
- */
 const addDailyMeals = async (
 	payload: IAddDailyMealsPayload,
 	user: RequestUser,
@@ -77,8 +66,6 @@ const addDailyMeals = async (
 
 	const date = toDateOnly(payload.date);
 
-	// A meal can only belong to the month it was eaten in, otherwise it would be
-	// counted against the wrong grocery bill.
 	if (
 		date.getUTCFullYear() !== cycle.year ||
 		date.getUTCMonth() + 1 !== cycle.month
@@ -112,8 +99,6 @@ const addDailyMeals = async (
 		);
 	}
 
-	// Nobody eats before they move in or after they move out. Without this a
-	// stray entry would give someone a share of a month they were not part of.
 	for (const member of members) {
 		if (toDateOnly(member.joinedAt) > date) {
 			throw new AppError(
@@ -134,9 +119,6 @@ const addDailyMeals = async (
 		const saved = [];
 
 		for (const entry of payload.entries) {
-			// upsert rather than create: re-sending a day is a correction, not a
-			// duplicate. A soft-deleted row still holds the unique slot, so the
-			// update path also clears the delete flags and restores it.
 			const row = await tx.mealEntry.upsert({
 				where: { memberId_date: { memberId: entry.memberId, date } },
 				create: {
@@ -187,10 +169,6 @@ const getCycleMeals = async (
 
 	const andConditions: MealEntryWhereInput[] = [{ cycleId, isDeleted: false }];
 
-	// Readable by anyone in the mess. The register is the wall chart: members
-	// check it to see the manager recorded them correctly, and whoever is on
-	// grocery duty reads it to plan. Filtering it to your own row would make the
-	// summary, which already shows everyone, contradict this list.
 	if (query.memberId) {
 		andConditions.push({ memberId: query.memberId });
 	}
@@ -233,13 +211,6 @@ const getCycleMeals = async (
 	};
 };
 
-/**
- * The month at a glance: how many meals each member ate, and the running rate.
- *
- * This is the handwritten ledger page the project replaces, so it returns the
- * same three things that page carried - per member totals, the mess total, and
- * what one meal currently costs.
- */
 const getMealSummary = async (cycleId: string, user: RequestUser) => {
 	const cycle = await prisma.billingCycle.findUnique({
 		where: { id: cycleId },
@@ -282,8 +253,6 @@ const getMealSummary = async (cycleId: string, user: RequestUser) => {
 		]),
 	);
 
-	// Members with no meals recorded still belong on the page, showing zero.
-	// Dropping them would make the register look shorter than the mess.
 	const rows = members.map((member) => {
 		const totals = totalsByMember.get(member.id) ?? { lunch: 0, dinner: 0 };
 
@@ -310,8 +279,7 @@ const getMealSummary = async (cycleId: string, user: RequestUser) => {
 		},
 		totalMeals,
 		totalGrocery: grocery,
-		// Moves with every meal and every grocery slip while the month is open,
-		// so it is computed here rather than stored.
+
 		runningMealRate:
 			totalMeals > 0 ? Number((grocery / totalMeals).toFixed(4)) : 0,
 		members: rows,
@@ -388,9 +356,6 @@ const deleteMeal = async (mealId: string, user: RequestUser) => {
 		);
 	}
 
-	// Soft delete keeps the row, which matters twice over: the register stays
-	// auditable, and the unique slot stays taken so re-recording the same day
-	// restores this row instead of inserting a second one.
 	return prisma.mealEntry.update({
 		where: { id: mealId },
 		data: { isDeleted: true, deletedAt: new Date() },

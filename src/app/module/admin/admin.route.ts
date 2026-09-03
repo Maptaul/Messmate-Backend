@@ -7,8 +7,6 @@ import { AdminValidation } from "./admin.validation";
 
 const router = Router();
 
-// Every route here is platform administration, so the whole file is ADMIN only.
-// A mess manager runs their own mess; none of this is about one mess.
 router.get(
 	"/dashboard-stats",
 	auth(Role.ADMIN),

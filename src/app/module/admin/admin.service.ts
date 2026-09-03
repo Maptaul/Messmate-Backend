@@ -84,11 +84,6 @@ const getAllUsers = async (query: IQuery) => {
 	};
 };
 
-/**
- * One user with the messes they touch, because that is what an admin needs
- * before changing anything about them - a manager with an open month and a
- * member with an unpaid bill are not the same person to act on.
- */
 const getSingleUser = async (userId: string) => {
 	const user = await prisma.user.findUnique({
 		where: { id: userId },
@@ -117,10 +112,6 @@ const getSingleUser = async (userId: string) => {
 	return user;
 };
 
-/**
- * Loads the target and refuses the two things an admin should never be able to
- * do to themselves: lock themselves out, or remove the last way back in.
- */
 const loadTargetUser = async (userId: string, user: RequestUser) => {
 	if (userId === user.userId) {
 		throw new AppError(
@@ -155,13 +146,6 @@ const changeUserRole = async (
 		);
 	}
 
-	// No "last admin" check here on purpose: this route is ADMIN-only and the
-	// caller cannot be the target, so an admin acting on another admin is always
-	// one that survives. The platform can never be left with none.
-
-	// A manager demoted out of MESS_MANAGER keeps owning the mess row but loses
-	// every route that maintains it - the month could no longer be closed and the
-	// ledger would sit there unfinishable. Hand the mess over first.
 	if (target.role === Role.MESS_MANAGER && payload.role !== Role.MESS_MANAGER) {
 		const managedMess = await prisma.mess.findFirst({
 			where: { managerId: userId, isDeleted: false },
@@ -210,9 +194,6 @@ const changeUserStatus = async (
 		);
 	}
 
-	// Blocking a manager mid-month strands their mess: nobody else can record the
-	// meals or close the cycle, and the members cannot be billed. Wait for the
-	// month to close, or hand the mess over.
 	if (
 		payload.status === UserStatus.BLOCKED &&
 		target.role === Role.MESS_MANAGER
@@ -256,10 +237,6 @@ const changeUserStatus = async (
 	});
 };
 
-/**
- * The trail read back. Everything money- or permission-shaped is written here as
- * it happens; without a way to read it the log is only half a feature.
- */
 const getAuditLogs = async (query: IQuery) => {
 	const limit = query.limit ? Number(query.limit) : 10;
 	const page = query.page ? Number(query.page) : 1;
@@ -314,16 +291,8 @@ const getAuditLogs = async (query: IQuery) => {
 	};
 };
 
-// A minute-old dashboard is still a true dashboard, and ten aggregates is a lot
-// to repeat for every refresh. Nothing invalidates this on write: coupling every
-// module in the codebase to the admin screen would cost more than the staleness.
 const DASHBOARD_CACHE_SECONDS = 60;
 
-/**
- * Platform health in one call. Every figure is a count or a sum the database
- * already has an index for, and they run together rather than in sequence -
- * a dashboard that takes eight round trips is a dashboard nobody opens.
- */
 const getDashboardStats = async () =>
 	cached(cacheKeys.dashboardStats, DASHBOARD_CACHE_SECONDS, async () => {
 		const [

@@ -9,13 +9,6 @@ Cloudinary.config({
 	api_secret: config.cloudinary_api_secret,
 });
 
-/**
- * Uploads a multer memory buffer to Cloudinary.
- *
- * upload_stream is callback based, so it gets wrapped once here rather than
- * being rebuilt in every service that needs an image. This is also the only
- * file that talks to Cloudinary, which keeps a provider swap to one file.
- */
 export const uploadToCloudinary = async (
 	file: Express.Multer.File,
 	folder: string,
@@ -53,10 +46,6 @@ export const uploadToCloudinary = async (
 	});
 };
 
-/**
- * Removes an image. Failure is swallowed on purpose: a leftover file in
- * Cloudinary is untidy, but failing the request that replaced it is worse.
- */
 export const destroyFromCloudinary = async (publicId: string) => {
 	try {
 		await Cloudinary.uploader.destroy(publicId);

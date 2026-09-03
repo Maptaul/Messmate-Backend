@@ -7,6 +7,8 @@ the system computes every member's real share and lets them settle it through
 
 Built for Programming Hero **B7A6** (Assignment 6) — backend only.
 
+**Live API:** <https://messmatebackend.vercel.app> · **[API Reference](docs/API.md)** · **[Postman collection](postman/MessMate.postman_collection.json)**
+
 > **Why this project?** Our own 8-person mess in Chattogram keeps this ledger by
 > hand every month: who ate how many meals, who did the grocery run, who paid the
 > gas and electricity bill, and who owes what at the end. MessMate turns that
@@ -326,8 +328,8 @@ change from their local values:
 
 | Variable | Production value |
 | --- | --- |
-| `BACKEND_URL` | `https://<project>.vercel.app` |
-| `BKASH_CALLBACK_URL` | `https://<project>.vercel.app/api/v1` |
+| `BACKEND_URL` | `https://messmatebackend.vercel.app` |
+| `BKASH_CALLBACK_URL` | `https://messmatebackend.vercel.app/api/v1` |
 | `FRONTEND_URL` | wherever the browser should land after paying |
 
 `BKASH_CALLBACK_URL` is the one that silently ruins a demo: leave it on localhost
@@ -392,7 +394,10 @@ Every endpoint returns the same envelope.
 ## 📮 Postman
 
 `postman/MessMate.postman_collection.json` — **91 requests across 15 folders**.
-Import it, set `baseUrl`, and run the whole thing top to bottom: tokens, `messId`,
+`baseUrl` already points at the live API, so importing and running it needs no
+edits. A plain-markdown reference lives at [docs/API.md](docs/API.md).
+
+Run the whole thing top to bottom: tokens, `messId`,
 `cycleId`, `billId` and `paymentId` all chain themselves through the requests'
 test scripts.
 
@@ -409,6 +414,8 @@ hosted page actually paid. Everything else passes:
 ```
 === pass 83 | fail 0 | manual 8 | error 0 | total 91 ===
 ```
+
+That run was against the deployed API, not localhost.
 
 The Admin folder's two state-changing pairs are round trips — role there and
 back, block then unblock — because leaving the demo member promoted or blocked
@@ -452,8 +459,8 @@ Feature-complete — see `.agents/` for the conventions this repo follows.
 ```text
 Project Name    : MessMate — Smart Mess & Shared Housing Management Platform
 Backend Repo    : https://github.com/Maptaul/Messmate-Backend
-Live API        : (pending)
-API Docs        : (pending)
+Live API        : https://messmatebackend.vercel.app
+API Docs        : https://github.com/Maptaul/Messmate-Backend/blob/main/docs/API.md
 Demo Video      : (pending)
 Admin Email     : admin@messmate.app
 Admin Password  : (provided at submission)

@@ -26,25 +26,18 @@ export const globalErrorHandler = async (
 	let errorMessage = err.message || "Internal Server Error";
 	const errorName = err.name || "Internal Server Error";
 
-	// The assignment mandates an `errors` array on every failure response.
-	// It stays empty when there is nothing field-specific to report.
 	let errors: TErrorSource[] = [];
 
-	// Whether the real message is safe to send. True for errors we raised on
-	// purpose; false only for a genuinely unknown crash, which must not leak.
 	let isKnownError = false;
 
 	if (err instanceof ZodError) {
-		// validateRequest converts most Zod failures into an AppError first, so
-		// this branch catches schemas parsed directly inside a service.
 		statusCode = httpStatus.BAD_REQUEST;
 		isKnownError = true;
 		errors = err.issues.map((issue) => ({
 			field: issue.path.join("."),
 			message: issue.message,
 		}));
-		// Lead with the first problem so the message alone is actionable, and keep
-		// the full list in errors.
+
 		errorMessage = errors[0]?.message ?? "Validation failed";
 	} else if (err instanceof AppError) {
 		statusCode = err.statusCode;
@@ -58,8 +51,6 @@ export const globalErrorHandler = async (
 		isKnownError = true;
 
 		if (err.code === "P2002") {
-			// A unique constraint is a business rule here (one bill per member per
-			// cycle, one meal entry per member per day), so 409 rather than 400.
 			statusCode = httpStatus.CONFLICT;
 			const target = err.meta?.target as string[] | undefined;
 			errorMessage = "This record already exists";
@@ -96,7 +87,6 @@ export const globalErrorHandler = async (
 		errorMessage = "Error occurred during query execution";
 	}
 
-	// An unknown error keeps its detail in the server log only.
 	if (!isKnownError) {
 		console.error("[globalErrorHandler] Unhandled error", err);
 	}

@@ -16,7 +16,7 @@ const RegisterUserZodSchema = z.object({
 	email: z.email("Not a valid email"),
 	password: passwordSchema,
 	phone: z.string().max(20, "Phone Number Is Too Long").optional(),
-	// ADMIN is deliberately absent: it is seeded, never self-registered.
+
 	role: z
 		.enum(["MESS_MANAGER", "MEMBER"], "Role Must Be MESS_MANAGER Or MEMBER")
 		.optional(),

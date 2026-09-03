@@ -8,8 +8,7 @@ const mealCountSchema = z.coerce
 
 const SetMealPlanValidationZodSchema = z.object({
 	cycleId: z.string().min(1, "Cycle Id Is Required"),
-	// A member planning for themselves leaves this out. A manager may name a
-	// member of their own mess, for someone who told them in person.
+
 	memberId: z.string().optional(),
 	days: z
 		.array(

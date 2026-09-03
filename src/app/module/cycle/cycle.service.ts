@@ -33,8 +33,6 @@ const cycleSelect = {
 const daysInMonth = (year: number, month: number) =>
 	new Date(year, month, 0).getDate();
 
-// How many days of this month the member was actually here. Someone who joined
-// on the 15th carries half the rent of someone who was there all month.
 const daysPresentInCycle = (
 	year: number,
 	month: number,
@@ -74,8 +72,6 @@ const openCycle = async (payload: IOpenCyclePayload, user: RequestUser) => {
 		);
 	}
 
-	// Two open months at once would make it ambiguous which one a meal or an
-	// expense belongs to, so the previous month has to be closed first.
 	const openCycleExists = await prisma.billingCycle.findFirst({
 		where: { messId: payload.messId, status: CycleStatus.OPEN },
 		select: { year: true, month: true },
@@ -88,8 +84,6 @@ const openCycle = async (payload: IOpenCyclePayload, user: RequestUser) => {
 		);
 	}
 
-	// The unique constraint on (messId, year, month) also catches this, but a
-	// named message beats a duplicate-key error.
 	const alreadyExists = await prisma.billingCycle.findUnique({
 		where: {
 			messId_year_month: {
@@ -138,8 +132,7 @@ const getMessCycles = async (
 	const limit = query.limit ? Number(query.limit) : 10;
 	const page = query.page ? Number(query.page) : 1;
 	const skip = (page - 1) * limit;
-	// Narrowed to the literal union rather than left as string: orderBy uses
-	// named keys here, so Prisma type-checks the value.
+
 	const sortOrder = query.sortOrder === "asc" ? "asc" : "desc";
 
 	const andConditions: BillingCycleWhereInput[] = [{ messId }];
@@ -175,12 +168,6 @@ const getMessCycles = async (
 	};
 };
 
-/**
- * A cycle plus what it looks like right now. While the month is open the
- * running meal rate moves with every meal and every grocery slip, so it is
- * computed on read rather than stored - a stored value would be stale the
- * moment anything changed.
- */
 const getSingleCycle = async (cycleId: string, user: RequestUser) => {
 	const cycle = await prisma.billingCycle.findUnique({
 		where: { id: cycleId },
@@ -231,14 +218,6 @@ const getSingleCycle = async (cycleId: string, user: RequestUser) => {
 	};
 };
 
-/**
- * Closes the month and writes every member bill.
- *
- * The first statement is the whole concurrency story: a conditional update that
- * only matches while the cycle is still OPEN. Two simultaneous close requests
- * both attempt it, exactly one gets count 1, and the loser throws and rolls
- * back. Reading the status and then updating would let both through.
- */
 const closeCycle = async (cycleId: string, user: RequestUser) => {
 	const cycle = await prisma.billingCycle.findUnique({
 		where: { id: cycleId },
@@ -283,7 +262,7 @@ const closeCycle = async (cycleId: string, user: RequestUser) => {
 			where: {
 				messId: cycle.messId,
 				isDeleted: false,
-				// Someone who left mid-month still owes for the days they were here.
+
 				OR: [{ status: MemberStatus.ACTIVE }, { leftAt: { not: null } }],
 			},
 			select: { id: true, joinedAt: true, leftAt: true },
@@ -400,11 +379,6 @@ const closeCycle = async (cycleId: string, user: RequestUser) => {
 	});
 };
 
-/**
- * Puts a closed month back into edit. Admin only, and refused once any money
- * has been paid against it - at that point the ledger has left the building and
- * rewriting it would contradict a real transaction.
- */
 const reopenCycle = async (cycleId: string, user: RequestUser) => {
 	const cycle = await prisma.billingCycle.findUnique({
 		where: { id: cycleId },
@@ -419,9 +393,6 @@ const reopenCycle = async (cycleId: string, user: RequestUser) => {
 		throw new AppError(httpStatus.CONFLICT, "This Cycle Is Already Open");
 	}
 
-	// Both halves matter. `paidAmount` is the ledger's own answer, and a PAID
-	// payment row is bKash's - if the two ever disagree the month still stays
-	// shut, because a settled transaction outranks a bookkeeping field.
 	const paidBill = await prisma.memberBill.findFirst({
 		where: {
 			cycleId,
@@ -453,8 +424,6 @@ const reopenCycle = async (cycleId: string, user: RequestUser) => {
 	}
 
 	return prisma.$transaction(async (tx) => {
-		// The bills came from the settlement, so they are regenerated on the next
-		// close. Leaving them would mean two sets of bills for one month.
 		const removed = await tx.memberBill.deleteMany({ where: { cycleId } });
 
 		const reopened = await tx.billingCycle.update({

@@ -43,13 +43,6 @@ const toDateOnly = (date: Date) =>
 		Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
 	);
 
-/**
- * Loads the cycle and refuses anything that would change a settled month.
- *
- * Every expense feeds the settlement: GROCERY sets the meal rate, the utility
- * types are split across members, and whoever paid gets credited. Letting one
- * change after close would leave bills that no longer match their own inputs.
- */
 const loadWritableCycle = async (cycleId: string, user: RequestUser) => {
 	const cycle = await prisma.billingCycle.findUnique({
 		where: { id: cycleId },
@@ -88,8 +81,6 @@ const addExpense = async (
 
 	const spentAt = toDateOnly(payload.spentAt);
 
-	// An expense belongs to the month it was spent in, or it would be divided
-	// among the wrong people against the wrong meal total.
 	if (
 		spentAt.getUTCFullYear() !== cycle.year ||
 		spentAt.getUTCMonth() + 1 !== cycle.month
@@ -118,8 +109,6 @@ const addExpense = async (
 		}
 	}
 
-	// Optional. Most expenses are entered from memory with no slip to photograph,
-	// so a missing receipt is normal rather than an error.
 	const upload = receipt ? await uploadToCloudinary(receipt, "receipts") : null;
 
 	return prisma.expense.create({
@@ -153,8 +142,6 @@ const getCycleExpenses = async (
 		throw new AppError(httpStatus.NOT_FOUND, "Billing Cycle Not Found");
 	}
 
-	// Readable by everyone in the mess. These are the numbers each member is
-	// about to be billed from, so being able to check them is the point.
 	await checkMessAccess(cycle.messId, user);
 
 	const limit = query.limit ? Number(query.limit) : 10;
@@ -200,14 +187,6 @@ const getCycleExpenses = async (
 	};
 };
 
-/**
- * The spending side of the ledger page: what went out this month, grouped the
- * way the settlement will use it.
- *
- * GROCERY is reported on its own because it is the only type that sets the meal
- * rate. The rest are shared costs, and RENT is separate again because it is
- * prorated by tenure rather than split.
- */
 const getExpenseSummary = async (cycleId: string, user: RequestUser) => {
 	const cycle = await prisma.billingCycle.findUnique({
 		where: { id: cycleId },
@@ -272,8 +251,7 @@ const getExpenseSummary = async (cycleId: string, user: RequestUser) => {
 		grandTotal,
 		grocery,
 		rent,
-		// What gets split across members: everything that is neither the grocery
-		// bill nor the rent.
+
 		sharedTotal: grandTotal - grocery - rent,
 		totalMeals,
 		runningMealRate:
@@ -283,7 +261,7 @@ const getExpenseSummary = async (cycleId: string, user: RequestUser) => {
 			total: Number(row._sum.amount ?? 0),
 			count: row._count._all,
 		})),
-		// Who is owed money back. This becomes their credit at settlement.
+
 		paidByMembers: byPayer.map((row) => ({
 			memberId: row.paidByMemberId,
 			name: payerNames.get(row.paidByMemberId as string) ?? null,
@@ -363,8 +341,6 @@ const updateExpense = async (
 		select: expenseSelect,
 	});
 
-	// Only after the replacement is safely stored, so a failed upload cannot
-	// leave the expense with no receipt at all.
 	if (upload && expense.receiptPublicId) {
 		await destroyFromCloudinary(expense.receiptPublicId);
 	}
@@ -390,8 +366,6 @@ const deleteExpense = async (expenseId: string, user: RequestUser) => {
 
 	await loadWritableCycle(expense.cycleId, user);
 
-	// Audited, because removing an expense changes what every member in the mess
-	// owes - the grocery bill sets the meal rate and the rest is split.
 	return prisma.$transaction(async (tx) => {
 		const removed = await tx.expense.update({
 			where: { id: expenseId },

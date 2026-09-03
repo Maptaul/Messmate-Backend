@@ -30,8 +30,6 @@ import type {
 const OTP_EXPIRATION_SECONDS = 5 * 60;
 const OTP_EXPIRATION_TEXT = "5 minutes";
 
-// Every token in this app carries the same claim set, so the shape lives in one
-// place. Note the id claim is `userId`, which is what checkAuth reads back.
 const createAuthTokens = (user: {
 	id: string;
 	name: string;
@@ -60,8 +58,6 @@ const createAuthTokens = (user: {
 	return { accessToken, refreshToken };
 };
 
-// Renders an ejs template and mails it. Used four times in this module, so it
-// stays here rather than being repeated per function.
 const sendTemplateMail = async (
 	to: string,
 	subject: string,
@@ -116,9 +112,6 @@ const registerUser = async (payload: IRegisterUserPayload) => {
 		},
 	});
 
-	// The user row is not created yet. Everything needed to create it waits in
-	// Redis and expires with the OTP, so an abandoned signup leaves nothing
-	// behind and does not hold the email address hostage.
 	const registrationKey = `user-registration-data:${email}`;
 
 	await redisClient.set(
@@ -246,9 +239,6 @@ const loginUser = async (payload: ILoginUserPayload) => {
 		throw new AppError(httpStatus.FORBIDDEN, "User Is Deleted");
 	}
 
-	// A Google-only account has no password to compare against. Say so, rather
-	// than letting bcrypt.compare fail against null and return a misleading
-	// invalid-credentials message.
 	if (user.password === null && user.googleId !== null) {
 		throw new AppError(
 			httpStatus.BAD_REQUEST,
@@ -334,8 +324,6 @@ const refreshToken = async (token: string) => {
 		);
 	}
 
-	// Rebuilt from the database row, not from the old token, so a role change or
-	// a rename takes effect on the next refresh.
 	const { accessToken, refreshToken: newRefreshToken } = createAuthTokens(user);
 
 	return {
@@ -395,9 +383,6 @@ const googleLogin = async (payload: IGoogleLoginPayload) => {
 			throw new AppError(httpStatus.FORBIDDEN, "User Is Deleted");
 		}
 
-		// An existing credential account signing in with Google for the first
-		// time gets linked. The role is never touched here - a social login must
-		// not be able to change what someone is allowed to do.
 		if (!user.googleId) {
 			user = await prisma.user.update({
 				where: { id: user.id },
@@ -405,8 +390,6 @@ const googleLogin = async (payload: IGoogleLoginPayload) => {
 			});
 		}
 	} else {
-		// Google register. New accounts are always MEMBER. Google has already
-		// proven the address, so no OTP round trip is needed here.
 		user = await prisma.user.create({
 			data: {
 				name: googleIdTokenPayload.name,
@@ -544,7 +527,6 @@ const resetPassword = async (payload: IResetPasswordPayload) => {
 		data: { password: hashedNewPassword },
 	});
 
-	// Burn the OTP so the same code cannot change the password twice.
 	await redisClient.del([otpKey]);
 
 	await sendTemplateMail(

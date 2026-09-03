@@ -26,14 +26,12 @@ router.post(
 	CycleController.closeCycle,
 );
 
-// Admin only: reopening rewrites a month that was already settled.
 router.post(
 	"/reopen-cycle/:cycleId",
 	auth(Role.ADMIN),
 	CycleController.reopenCycle,
 );
 
-// Wildcard last, so the named routes above are not swallowed by it.
 router.get(
 	"/:cycleId",
 	auth(Role.ADMIN, Role.MESS_MANAGER, Role.MEMBER),

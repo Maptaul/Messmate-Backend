@@ -11,14 +11,8 @@ import type {
 	ISetMealPlanPayload,
 } from "./mealPlan.interface";
 
-/**
- * The mess is in Bangladesh, and the deployed server runs in UTC. Doing this
- * arithmetic in server-local time would move every deadline by six hours, so
- * the offset is explicit rather than inherited from the host.
- */
 const DHAKA_UTC_OFFSET_HOURS = 6;
 
-/** Declarations for a day close at 11 PM the night before. */
 const CUTOFF_HOUR_LOCAL = 23;
 
 const toDateOnly = (date: Date) =>
@@ -26,13 +20,6 @@ const toDateOnly = (date: Date) =>
 		Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
 	);
 
-/**
- * The moment a day stops accepting declarations.
- *
- * For the 4th, that is 11 PM on the 3rd in Dhaka, which is 17:00 UTC on the 3rd.
- * Declaring for the 4th on the 4th is therefore always too late - which is the
- * whole point, since the manager shops and cooks that morning.
- */
 const planDeadlineFor = (date: Date) => {
 	const day = toDateOnly(date);
 
@@ -81,14 +68,6 @@ const loadCycle = async (cycleId: string) => {
 	return cycle;
 };
 
-/**
- * Declares which meals a member will take, for one or more days of the month.
- *
- * Every day is checked against its own deadline before anything is written, and
- * the whole set goes in one transaction. Saving the days that were still open
- * and rejecting the rest would leave the member unsure what they actually
- * declared.
- */
 const setMealPlan = async (payload: ISetMealPlanPayload, user: RequestUser) => {
 	const cycle = await loadCycle(payload.cycleId);
 
@@ -101,10 +80,6 @@ const setMealPlan = async (payload: ISetMealPlanPayload, user: RequestUser) => {
 		);
 	}
 
-	// A member plans only for themselves. A manager may name someone else - for
-	// the person who told them in the corridor rather than in the app - but when
-	// they leave memberId out they are planning their own meals, because the
-	// manager lives in the mess and eats there like everyone else.
 	let memberId: string;
 
 	if (user.role === Role.MEMBER) {
@@ -128,8 +103,6 @@ const setMealPlan = async (payload: ISetMealPlanPayload, user: RequestUser) => {
 	} else if (membership) {
 		memberId = membership.id;
 	} else {
-		// An admin, or a manager who does not live in the mess, has nobody to
-		// plan for unless they say who.
 		throw new AppError(
 			httpStatus.BAD_REQUEST,
 			"Member Id Is Required When You Are Not A Member Of This Mess",
@@ -212,8 +185,7 @@ const setMealPlan = async (payload: ISetMealPlanPayload, user: RequestUser) => {
 					lunch: day.lunch,
 					dinner: day.dinner,
 				},
-				// Changing your mind before the cutoff updates the declaration
-				// rather than stacking a second one on top of it.
+
 				update: { lunch: day.lunch, dinner: day.dinner },
 				select: planSelect,
 			});
@@ -224,26 +196,16 @@ const setMealPlan = async (payload: ISetMealPlanPayload, user: RequestUser) => {
 		return rows;
 	});
 
-	// Dropped after the transaction commits, never inside it: a rollback would
-	// otherwise leave the cache cleared for a change that never happened.
 	await invalidateCache(cacheKeys.mealPlanCalendar(cycle.id));
 
 	return saved;
 };
 
-/**
- * A member own month, day by day, with the deadline for each.
- *
- * `isLocked` is what a calendar UI needs: it says which days can still be
- * changed without the client having to know the cutoff rule.
- */
 const getMyCalendar = async (cycleId: string, user: RequestUser) => {
 	const cycle = await loadCycle(cycleId);
 
 	const membership = await checkMessAccess(cycle.messId, user);
 
-	// A manager has a membership too, so this only rejects an admin, who lives
-	// in no mess and therefore has no personal calendar.
 	if (!membership) {
 		throw new AppError(
 			httpStatus.BAD_REQUEST,
@@ -270,8 +232,6 @@ const getMyCalendar = async (cycleId: string, user: RequestUser) => {
 	const now = new Date();
 	const totalDays = new Date(Date.UTC(cycle.year, cycle.month, 0)).getUTCDate();
 
-	// Every day of the month is returned, planned or not, so the client renders
-	// a full calendar instead of a sparse list with holes in it.
 	const days = Array.from({ length: totalDays }, (_, index) => {
 		const date = new Date(Date.UTC(cycle.year, cycle.month - 1, index + 1));
 		const key = date.toISOString().slice(0, 10);
@@ -301,10 +261,6 @@ const getMyCalendar = async (cycleId: string, user: RequestUser) => {
 	};
 };
 
-// Everyone in the mess reads this to see tomorrow's headcount, so it is worth
-// caching - but it is dropped the moment anyone declares, and the TTL is only
-// the backstop. Near the 11 PM cutoff the writes come thick and the cache earns
-// little; the rest of the day it earns plenty.
 const CALENDAR_CACHE_SECONDS = 300;
 
 type TPlanDay = {
@@ -314,11 +270,6 @@ type TPlanDay = {
 	members: { memberId: string; name: string; lunch: number; dinner: number }[];
 };
 
-/**
- * The part that comes out of the database, grouped by day. Deliberately carries
- * no deadline or lock flag - those depend on the clock, and a cached clock is a
- * wrong clock.
- */
 const buildPlanDays = async (
 	cycleId: string,
 	date?: Date,
@@ -352,11 +303,6 @@ const buildPlanDays = async (
 	return [...byDate.values()];
 };
 
-/**
- * Stamps each day with its cutoff and whether that cutoff has passed, computed
- * against the clock right now. This runs on cache hits too, so a day can never
- * be shown as still open five minutes after it closed.
- */
 const withDeadlines = (
 	cycle: { id: string; year: number; month: number; status: CycleStatus },
 	days: TPlanDay[],
@@ -386,10 +332,6 @@ const withDeadlines = (
 	};
 };
 
-/**
- * What the manager needs before shopping: how many lunches and dinners each day
- * of the month is expected to need, and who is behind those numbers.
- */
 const getCycleCalendar = async (
 	cycleId: string,
 	query: IQuery,
@@ -397,15 +339,8 @@ const getCycleCalendar = async (
 ) => {
 	const cycle = await loadCycle(cycleId);
 
-	// Everyone in the mess can read this. Grocery duty rotates, so the person
-	// shopping on the 10th is usually a member rather than the manager, and the
-	// whole point of declaring in advance is that whoever shops knows the count.
-	// Nothing here is private either - a mess meal chart hangs on the wall, and
-	// being able to check it is how members verify the register.
 	await checkMessAccess(cycle.messId, user);
 
-	// A single day is one indexed lookup, so it is left uncached - that also keeps
-	// one key per cycle and one thing to drop on write.
 	if (query.date) {
 		return withDeadlines(
 			cycle,
@@ -422,15 +357,6 @@ const getCycleCalendar = async (
 	return withDeadlines(cycle, days);
 };
 
-/**
- * Copies one day of declarations into the actual register.
- *
- * The plan is what people said they would eat; MealEntry is what they are
- * charged for. This is the bridge, so the manager starts the day from what was
- * declared instead of retyping it, and then corrects whatever actually
- * happened. Existing entries are left alone - a correction already made must
- * not be undone by re-applying the plan.
- */
 const applyPlanToRegister = async (
 	payload: IApplyPlanPayload,
 	user: RequestUser,
@@ -496,8 +422,7 @@ const applyPlanToRegister = async (
 					lunch: plan.lunch,
 					dinner: plan.dinner,
 				},
-				// Only reached for a soft-deleted row, which the query above cannot
-				// see. Restoring it beats failing on the unique key.
+
 				update: {
 					lunch: plan.lunch,
 					dinner: plan.dinner,

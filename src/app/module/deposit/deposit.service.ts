@@ -30,11 +30,6 @@ const depositSelect = {
 	createdBy: { select: { id: true, name: true } },
 };
 
-/**
- * Cash handed over before there is a bill to pay - the deposit becomes credit
- * at settlement. Only the manager records it, the same split as meals and
- * expenses: they are the one holding the money and writing it down.
- */
 const loadWritableCycle = async (cycleId: string, user: RequestUser) => {
 	const cycle = await prisma.billingCycle.findUnique({
 		where: { id: cycleId },
@@ -105,9 +100,6 @@ const getCycleDeposits = async (
 		throw new AppError(httpStatus.NOT_FOUND, "Billing Cycle Not Found");
 	}
 
-	// Readable by everyone in the mess. A deposit is credit against someone's
-	// bill, so being able to check it here is what lets a member confirm the
-	// manager actually recorded the cash they handed over.
 	await checkMessAccess(cycle.messId, user);
 
 	const limit = query.limit ? Number(query.limit) : 10;
@@ -177,8 +169,6 @@ const deleteDeposit = async (depositId: string, user: RequestUser) => {
 
 	await loadWritableCycle(deposit.cycleId, user);
 
-	// Audited: removing a deposit takes credit away from whoever it belonged
-	// to, which changes what they owe at settlement.
 	return prisma.$transaction(async (tx) => {
 		const removed = await tx.deposit.update({
 			where: { id: depositId },

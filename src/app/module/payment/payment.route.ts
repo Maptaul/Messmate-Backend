@@ -7,12 +7,8 @@ import { PaymentValidation } from "./payment.validation";
 
 const router = Router();
 
-// bKash redirects the browser here, so there is no token to check. Everything
-// this route is told is verified against bKash before anything is written.
 router.get("/callback", PaymentController.paymentCallback);
 
-// Where a member finds the billId they need below. The manager gets a bill too -
-// they live in the mess like everyone else.
 router.get(
 	"/my-bills",
 	auth(Role.MESS_MANAGER, Role.MEMBER),
@@ -32,7 +28,6 @@ router.get(
 	PaymentController.getMyPayments,
 );
 
-// Wildcard last, so the named routes above are not swallowed by it.
 router.get(
 	"/:paymentId",
 	auth(Role.ADMIN, Role.MESS_MANAGER, Role.MEMBER),

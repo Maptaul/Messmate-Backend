@@ -11,14 +11,6 @@ type TAuditInput = {
 	after?: unknown;
 };
 
-/**
- * Records a critical action. Pass the transaction client when the action happens
- * inside one, so the log row commits or rolls back with the change it describes
- * — an audit entry for a rolled-back cycle close would be a lie.
- *
- * Log money- and permission-shaped actions only. Logging every read or every
- * meal entry buries the entries that matter.
- */
 export const writeAudit = async (
 	tx: Prisma.TransactionClient | typeof prisma,
 	input: TAuditInput,

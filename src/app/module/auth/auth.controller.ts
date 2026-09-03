@@ -9,8 +9,6 @@ import { AuthService } from "./auth.service";
 
 const isProduction = config.node_env === "production";
 
-// sameSite "none" is only honoured on a secure cookie, so the pair moves
-// together: cross-site over https in production, lax over http locally.
 const baseCookieOptions: CookieOptions = {
 	httpOnly: true,
 	secure: isProduction,
@@ -19,12 +17,12 @@ const baseCookieOptions: CookieOptions = {
 
 const accessCookieOptions: CookieOptions = {
 	...baseCookieOptions,
-	maxAge: 1000 * 60 * 60 * 24, // 24 hour or 1 day
+	maxAge: 1000 * 60 * 60 * 24,
 };
 
 const refreshCookieOptions: CookieOptions = {
 	...baseCookieOptions,
-	maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
+	maxAge: 1000 * 60 * 60 * 24 * 7,
 };
 
 const registerUser = catchAsync(async (req: Request, res: Response) => {
@@ -32,7 +30,6 @@ const registerUser = catchAsync(async (req: Request, res: Response) => {
 
 	await AuthService.registerUser(payload);
 
-	// No tokens yet - the account does not exist until the OTP is confirmed.
 	sendResponse(res, {
 		statusCode: httpStatus.CREATED,
 		success: true,
@@ -105,8 +102,6 @@ const getMe = catchAsync(async (req: Request, res: Response) => {
 });
 
 const refreshToken = catchAsync(async (req: Request, res: Response) => {
-	// Postman keeps the cookie jar, but the body is the escape hatch for a
-	// client that cannot send cookies cross-site.
 	const token = req.cookies?.refreshToken ?? req.body?.refreshToken;
 
 	if (!token) {
@@ -179,7 +174,6 @@ const resetPassword = catchAsync(async (req: Request, res: Response) => {
 });
 
 const logoutUser = catchAsync(async (_req: Request, res: Response) => {
-	// clearCookie only matches when the options match the ones used to set it.
 	res.clearCookie("accessToken", baseCookieOptions);
 	res.clearCookie("refreshToken", baseCookieOptions);
 

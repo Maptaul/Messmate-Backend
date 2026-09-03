@@ -35,7 +35,6 @@ app.use(
 	}),
 );
 
-// bKash posts form-encoded bodies, so urlencoded is parsed before json.
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(cookieParser());
@@ -56,7 +55,6 @@ app.use("/api/v1/deposit", DepositRoutes);
 app.use("/api/v1/payment", PaymentRoutes);
 app.use("/api/v1/admin", AdminRoutes);
 
-// Basic route
 app.get("/", async (_req: Request, res: Response) => {
 	res.status(httpStatus.OK).json({
 		success: true,

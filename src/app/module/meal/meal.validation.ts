@@ -1,7 +1,5 @@
 import z from "zod";
 
-// A plate count, not a boolean, so a guest meal or a second helping is
-// representable. The ceiling stops a typo from wrecking the whole month rate.
 const mealCountSchema = z.coerce
 	.number("Meal Count Must Be A Number")
 	.int("Meal Count Must Be A Whole Number")

@@ -8,9 +8,6 @@ import { ExpenseValidation } from "./expense.validation";
 
 const router = Router();
 
-// upload runs before validateRequest on purpose: with multipart form data the
-// body does not exist until multer has parsed it. The receipt itself is
-// optional, and a plain JSON request passes straight through.
 router.post(
 	"/add-expense",
 	auth(Role.ADMIN, Role.MESS_MANAGER),
@@ -19,8 +16,6 @@ router.post(
 	ExpenseController.addExpense,
 );
 
-// Readable by everyone in the mess - these are the numbers each member is
-// about to be billed from.
 router.get(
 	"/cycle-expenses/:cycleId",
 	auth(Role.ADMIN, Role.MESS_MANAGER, Role.MEMBER),

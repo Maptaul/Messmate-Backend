@@ -9,10 +9,6 @@ export const validateRequest = (zodSchema: z.ZodObject) => {
 		const result = zodSchema.safeParse(payload);
 
 		if (!result.success) {
-			// Rethrow the ZodError itself rather than flattening it into an
-			// AppError here. The global handler expands every issue into the
-			// { field, message } entries the response contract requires; wrapping
-			// it first would throw away all but the first message.
 			throw result.error;
 		}
 

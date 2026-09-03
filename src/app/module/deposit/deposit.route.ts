@@ -14,9 +14,6 @@ router.post(
 	DepositController.addDeposit,
 );
 
-// Readable by everyone in the mess - a deposit is credit against someone's
-// bill, so being able to check it is what lets a member confirm the cash
-// they handed over actually got recorded.
 router.get(
 	"/cycle-deposits/:cycleId",
 	auth(Role.ADMIN, Role.MESS_MANAGER, Role.MEMBER),

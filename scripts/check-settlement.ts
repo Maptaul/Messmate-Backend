@@ -5,17 +5,6 @@ import {
 	type SettlementInput,
 } from "../src/app/module/cycle/cycle.settlement";
 
-/**
- * Proves the settlement maths without a database.
- *
- * Run with: pnpm check:settlement
- *
- * The invariant that matters is that every split adds back to exactly the
- * amount it came from. A per-member figure that looks plausible on its own but
- * leaves a stray paisa makes the whole ledger wrong, and that is the kind of
- * bug nobody notices until someone hand-checks a month.
- */
-
 let passed = 0;
 
 const check = (label: string, fn: () => void) => {
@@ -23,10 +12,6 @@ const check = (label: string, fn: () => void) => {
 	passed += 1;
 	console.log(`  ok  ${label}`);
 };
-
-// ---------------------------------------------------------------------------
-// The real mess: 8 people, 480 meals, 9000 taka of groceries in a 30 day month.
-// ---------------------------------------------------------------------------
 
 const mealCounts: Record<string, number> = {
 	samir: 62,
@@ -104,10 +89,6 @@ check("payable is meal + shared + rent for every member", () => {
 	}
 });
 
-// ---------------------------------------------------------------------------
-// Credit: whoever paid for the groceries gets it back.
-// ---------------------------------------------------------------------------
-
 const withCredit = computeSettlement({
 	...july,
 	members: july.members.map((m) =>
@@ -146,10 +127,6 @@ check("a member who paid more than they consumed goes negative, not to zero", ()
 	assert.ok(shuvo);
 	assert.ok(shuvo.dueAmount < 0, "the mess owes this member");
 });
-
-// ---------------------------------------------------------------------------
-// The awkward numbers. These are where naive rounding breaks.
-// ---------------------------------------------------------------------------
 
 console.log("\nRounding - amounts that do not divide cleanly\n");
 
@@ -213,10 +190,6 @@ check("the same input always produces the same split", () => {
 	const b = computeSettlement(july);
 	assert.deepEqual(a.bills, b.bills);
 });
-
-// ---------------------------------------------------------------------------
-// Edge cases that must not throw or divide by zero.
-// ---------------------------------------------------------------------------
 
 console.log("\nEdge cases\n");
 

@@ -82,9 +82,6 @@ const addMember = async (payload: IAddMemberPayload, user: RequestUser) => {
 			);
 		}
 
-		// The unique constraint on (messId, userId) means a member who left still
-		// occupies the slot, so rejoining restores that row instead of inserting a
-		// second one. joinedAt is reset because rent is prorated from it.
 		return prisma.messMember.update({
 			where: { id: existingMembership.id },
 			data: {
@@ -242,8 +239,6 @@ const removeMember = async (memberId: string, user: RequestUser) => {
 		throw new AppError(httpStatus.CONFLICT, "This Member Has Already Left");
 	}
 
-	// Removing the manager would leave the mess without one, and their own
-	// membership is created with the mess.
 	if (member.userId === member.mess.managerId) {
 		throw new AppError(
 			httpStatus.BAD_REQUEST,
@@ -251,7 +246,6 @@ const removeMember = async (memberId: string, user: RequestUser) => {
 		);
 	}
 
-	// Someone who still owes money cannot be quietly dropped from the ledger.
 	const unpaidBill = await prisma.memberBill.findFirst({
 		where: {
 			memberId,
@@ -268,8 +262,6 @@ const removeMember = async (memberId: string, user: RequestUser) => {
 		);
 	}
 
-	// LEFT rather than deleted: their meals and expenses stay in the closed
-	// months they belong to, and rent stays prorated to the day they left.
 	return prisma.$transaction(async (tx) => {
 		const updated = await tx.messMember.update({
 			where: { id: memberId },

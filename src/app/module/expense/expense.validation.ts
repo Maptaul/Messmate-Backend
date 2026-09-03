@@ -19,8 +19,6 @@ const splitMethodSchema = z.enum(
 	"Split Method Must Be EQUAL Or BY_MEAL",
 );
 
-// Coerced rather than strict: an expense with a receipt arrives as multipart
-// form data, where every field is a string.
 const amountSchema = z.coerce
 	.number("Amount Must Be A Number")
 	.positive("Amount Must Be Greater Than Zero")

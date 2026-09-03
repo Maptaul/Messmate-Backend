@@ -1,26 +1,14 @@
 import type { ExpenseType, SplitMethod } from "../../../generated/prisma/enums";
 
-/**
- * The monthly settlement, as a pure function.
- *
- * No Prisma client, no request, no I/O - it takes plain numbers and returns
- * plain numbers. That is what lets scripts/check-settlement.ts prove the maths
- * without a database, and what makes it explainable on its own.
- *
- * Everything inside runs in integer paisa. Splitting money with floating point
- * leaves stray fractions that never add back up, and a ledger that does not sum
- * is a wrong ledger no matter how tidy each row looks.
- */
-
 export type SettlementMember = {
 	memberId: string;
-	/** lunch + dinner across the whole cycle */
+
 	mealCount: number;
-	/** cash handed to the manager during the month */
+
 	depositTotal: number;
-	/** expenses this member paid for out of their own pocket */
+
 	paidExpenseTotal: number;
-	/** days between joining and leaving, inside this month */
+
 	daysPresent: number;
 };
 
@@ -58,14 +46,6 @@ export type SettlementResult = {
 const toPaisa = (taka: number) => Math.round(taka * 100);
 const toTaka = (paisa: number) => paisa / 100;
 
-/**
- * Splits `totalPaisa` across `weights` so the parts add back to exactly the
- * total. Each share is rounded down first, then the leftover paisa go to the
- * largest fractional remainders - the standard largest-remainder method.
- *
- * Ties break towards the earlier index, which keeps the result deterministic:
- * the same input always produces the same bill.
- */
 const allocate = (totalPaisa: number, weights: number[]): number[] => {
 	const weightSum = weights.reduce((sum, w) => sum + w, 0);
 
@@ -99,15 +79,9 @@ export const computeSettlement = (input: SettlementInput): SettlementResult => {
 		.filter((e) => e.type === "GROCERY")
 		.reduce((sum, e) => sum + toPaisa(e.amount), 0);
 
-	// A rate, not a total, so it keeps four decimals. It is reported, never used
-	// to derive a member share - those come from allocate() below, which is what
-	// keeps the parts summing to the whole.
 	const mealRate =
 		totalMeals > 0 ? Number((toTaka(groceryPaisa) / totalMeals).toFixed(4)) : 0;
 
-	// GROCERY is excluded here because it is already distributed through the
-	// meal split; counting it again would charge everyone twice for the food.
-	// RENT is excluded because it is prorated by tenure, not split flat.
 	const sharedExpenses = expenses.filter(
 		(e) => e.type !== "GROCERY" && e.type !== "RENT",
 	);
@@ -125,8 +99,6 @@ export const computeSettlement = (input: SettlementInput): SettlementResult => {
 				? members.map((m) => m.mealCount)
 				: members.map(() => 1);
 
-		// A BY_MEAL expense in a month where nobody ate has no meals to divide
-		// by, so it falls back to an equal split rather than vanishing.
 		const usable = weights.some((w) => w > 0) ? weights : members.map(() => 1);
 
 		const parts = allocate(toPaisa(expense.amount), usable);
@@ -135,17 +107,8 @@ export const computeSettlement = (input: SettlementInput): SettlementResult => {
 		});
 	}
 
-	// Rent is weighted by days present rather than scaled by them. The mess owes
-	// the landlord the full rent whatever the occupancy, so proration decides how
-	// the burden is shared, not how much is collected. Weighting keeps the parts
-	// adding up to the whole rent; scaling each share by daysPresent/daysInMonth
-	// would quietly leave a shortfall nobody pays whenever someone leaves early.
 	const dayWeights = members.map((m) => Math.min(m.daysPresent, daysInMonth));
 
-	// If nobody registers a day present - a month opened for a period before
-	// anyone joined, say - the rent would otherwise be allocated to no one and
-	// quietly disappear. The mess still owes the landlord, so it falls back to an
-	// equal split, the same way a BY_MEAL expense does when there are no meals.
 	const usableDayWeights = dayWeights.some((d) => d > 0)
 		? dayWeights
 		: members.map(() => 1);
@@ -168,8 +131,7 @@ export const computeSettlement = (input: SettlementInput): SettlementResult => {
 			rentShare: toTaka(rentShare),
 			totalPayable: toTaka(totalPayable),
 			creditAmount: toTaka(creditAmount),
-			// Negative is correct and kept: the mess owes this member, because
-			// they paid for more than they consumed.
+
 			dueAmount: toTaka(totalPayable - creditAmount),
 		};
 	});

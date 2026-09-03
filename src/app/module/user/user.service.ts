@@ -12,8 +12,6 @@ const updateProfile = async (
 	payload: IUpdateProfilePayload,
 	user: RequestUser,
 ) => {
-	// Only name and phone. Email, role and status are deliberately not editable
-	// here - changing a role is an admin action, not a profile edit.
 	return prisma.user.update({
 		where: { id: user.userId },
 		data: {
@@ -51,8 +49,6 @@ const updateProfileImage = async (
 		omit: { password: true },
 	});
 
-	// Remove the old picture only after the new one is saved. Doing it first
-	// would leave the account with no picture at all if the upload then failed.
 	if (currentUser?.avatarPublicId) {
 		await destroyFromCloudinary(currentUser.avatarPublicId);
 	}

@@ -28,16 +28,8 @@ const toDateOnly = (date: Date) =>
 		Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
 	);
 
-// The whole mess reads this calendar to see whose turn it is, while the manager
-// books a handful of times a month - so it is dropped on every write and the TTL
-// is only the backstop for a delete that never landed.
 const CALENDAR_CACHE_SECONDS = 300;
 
-/**
- * Only the manager assigns who shops. They live in the mess like everyone
- * else and can put themselves on the rota, but deciding the rota is
- * management, not membership - the same split as recording meals or expenses.
- */
 const loadCycleForManager = async (cycleId: string, user: RequestUser) => {
 	const cycle = await prisma.billingCycle.findUnique({
 		where: { id: cycleId },
@@ -76,13 +68,6 @@ const assertWithinCycle = (
 	}
 };
 
-/**
- * Two members cannot both be "on duty" for the same day - it would leave
- * whoever reads the rota unable to tell who is actually shopping. Assigning
- * one range at a time and checking it against every other range already on
- * the cycle is what keeps that true, rather than trusting the caller not to
- * overlap.
- */
 const assertNoOverlap = async (
 	cycleId: string,
 	startDate: Date,
@@ -113,14 +98,6 @@ const assertNoOverlap = async (
 	}
 };
 
-/**
- * The booking itself: one member, one date range, any length the manager
- * chooses - four days for one person, six for the next, exactly like picking
- * check-in and check-out dates. The calendar view is just this data read back
- * day by day; there is no separate "generate the month" step, because the
- * manager builds the month by making one booking at a time, the way they
- * would fill in a paper calendar.
- */
 const assignDuty = async (payload: IAssignDutyPayload, user: RequestUser) => {
 	const cycle = await loadCycleForManager(payload.cycleId, user);
 
@@ -168,8 +145,6 @@ const getCycleDuties = async (cycleId: string, user: RequestUser) => {
 		throw new AppError(httpStatus.NOT_FOUND, "Billing Cycle Not Found");
 	}
 
-	// Readable by the whole mess - the rota is exactly the kind of thing that
-	// hangs on the wall, so everyone knows whose turn it is.
 	await checkMessAccess(cycle.messId, user);
 
 	return prisma.groceryDuty.findMany({
@@ -179,11 +154,6 @@ const getCycleDuties = async (cycleId: string, user: RequestUser) => {
 	});
 };
 
-/**
- * The rota expanded to one row per calendar day, for a day-by-day view rather
- * than the raw list of ranges getCycleDuties returns. Readable by the whole
- * mess for the same reason the ranges are: whoever is up next needs to see it.
- */
 const getCycleCalendar = async (cycleId: string, user: RequestUser) => {
 	const cycle = await prisma.billingCycle.findUnique({
 		where: { id: cycleId },
@@ -196,8 +166,6 @@ const getCycleCalendar = async (cycleId: string, user: RequestUser) => {
 
 	await checkMessAccess(cycle.messId, user);
 
-	// Cached below the access check on purpose: who may read this is decided per
-	// caller on every request, and only the calendar body is shared between them.
 	return cached(
 		cacheKeys.groceryDutyCalendar(cycleId),
 		CALENDAR_CACHE_SECONDS,
@@ -239,11 +207,6 @@ const getCycleCalendar = async (cycleId: string, user: RequestUser) => {
 	);
 };
 
-/**
- * How many days of duty the caller has this cycle, and which stretches they
- * came from - the answer to "this month, how many days did I do?" without
- * making them count ranges by hand.
- */
 const getMyDutyDays = async (cycleId: string, user: RequestUser) => {
 	const cycle = await prisma.billingCycle.findUnique({
 		where: { id: cycleId },
@@ -256,9 +219,6 @@ const getMyDutyDays = async (cycleId: string, user: RequestUser) => {
 
 	const membership = await checkMessAccess(cycle.messId, user);
 
-	// A manager has a membership too (they live in the mess like everyone
-	// else), so this only rejects an admin, who has no personal rota to ask
-	// about.
 	if (!membership) {
 		throw new AppError(
 			httpStatus.BAD_REQUEST,
@@ -389,8 +349,6 @@ const removeDuty = async (dutyId: string, user: RequestUser) => {
 		);
 	}
 
-	// Hard delete: a rota entry carries no financial history the way a meal or
-	// an expense does, so there is nothing here that soft delete needs to keep.
 	await prisma.groceryDuty.delete({ where: { id: dutyId } });
 
 	await invalidateCache(cacheKeys.groceryDutyCalendar(duty.cycleId));

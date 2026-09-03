@@ -32,9 +32,6 @@ const createPayment = catchAsync(async (req: Request, res: Response) => {
 	});
 });
 
-// The only handler that does not send the standard envelope. bKash hands the
-// browser back to us, so the browser has to leave with a redirect - a JSON body
-// would strand the member on a blank page.
 const paymentCallback = catchAsync(async (req: Request, res: Response) => {
 	const { redirectUrl } = await PaymentServices.paymentCallback(req.query);
 

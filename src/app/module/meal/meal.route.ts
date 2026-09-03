@@ -14,7 +14,6 @@ router.post(
 	MealController.addDailyMeals,
 );
 
-// A member reaches this too, but the service narrows the rows to their own.
 router.get(
 	"/cycle-meals/:cycleId",
 	auth(Role.ADMIN, Role.MESS_MANAGER, Role.MEMBER),

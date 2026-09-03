@@ -38,9 +38,6 @@ const createMess = async (payload: ICreateMessPayload, user: RequestUser) => {
 		);
 	}
 
-	// The manager lives in the mess too, so the mess row and their own membership
-	// are created together. A mess whose manager is not a member would silently
-	// drop them from every settlement.
 	const mess = await prisma.$transaction(async (tx) => {
 		const createdMess = await tx.mess.create({
 			data: {
@@ -117,7 +114,6 @@ const getMyMesses = async (query: IQuery, user: RequestUser) => {
 
 	const andConditions: MessWhereInput[] = [{ isDeleted: false }];
 
-	// A manager sees what they run; a member sees where they live.
 	if (user.role === Role.MESS_MANAGER) {
 		andConditions.push({ managerId: user.userId });
 	} else {
@@ -207,7 +203,6 @@ const updateMess = async (
 
 	await checkMessAccess(messId, user);
 
-	// A member of the mess passes checkMessAccess but must not be able to edit it.
 	if (user.role === Role.MEMBER) {
 		throw new AppError(
 			httpStatus.FORBIDDEN,
@@ -240,8 +235,6 @@ const deleteMess = async (messId: string, user: RequestUser) => {
 		);
 	}
 
-	// Deleting a mess with a month still open would strand every meal and expense
-	// recorded in it, so the month has to be closed first.
 	const openCycle = await prisma.billingCycle.findFirst({
 		where: { messId, status: CycleStatus.OPEN },
 		select: { id: true, year: true, month: true },
