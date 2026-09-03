@@ -15,3 +15,6 @@ package-lock.json
 
 .vscode
 
+# Local editor / tooling directories
+.agents/
+.claude/
