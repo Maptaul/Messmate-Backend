@@ -1,0 +1,16 @@
+node_modules
+.env
+.env.*
+!.env.example
+dist
+
+/src/generated
+
+# Lock files
+# pnpm-lock.yaml and pnpm-workspace.yaml ARE committed: Render needs the lockfile
+# for reproducible installs, and allowBuilds in the workspace file is what lets
+# the Prisma postinstall script run there.
+yarn.lock
+package-lock.json
+
+.vscode
