@@ -20,6 +20,7 @@ import { MealRoutes } from "./app/module/meal/meal.route";
 import { MealPlanRoutes } from "./app/module/mealPlan/mealPlan.route";
 import { MemberRoutes } from "./app/module/member/member.route";
 import { MessRoutes } from "./app/module/mess/mess.route";
+import { PaymentRoutes } from "./app/module/payment/payment.route";
 import { UserRoutes } from "./app/module/user/user.route";
 
 const app: Application = express();
@@ -51,6 +52,7 @@ app.use("/api/v1/meal-plan", MealPlanRoutes);
 app.use("/api/v1/expense", ExpenseRoutes);
 app.use("/api/v1/grocery-duty", GroceryDutyRoutes);
 app.use("/api/v1/deposit", DepositRoutes);
+app.use("/api/v1/payment", PaymentRoutes);
 
 // Basic route
 app.get("/", async (_req: Request, res: Response) => {

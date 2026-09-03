@@ -3,6 +3,7 @@ import {
 	AuditAction,
 	CycleStatus,
 	MemberStatus,
+	PaymentStatus,
 	Role,
 } from "../../../generated/prisma/enums";
 import type { BillingCycleWhereInput } from "../../../generated/prisma/models";
@@ -418,8 +419,17 @@ const reopenCycle = async (cycleId: string, user: RequestUser) => {
 		throw new AppError(httpStatus.CONFLICT, "This Cycle Is Already Open");
 	}
 
+	// Both halves matter. `paidAmount` is the ledger's own answer, and a PAID
+	// payment row is bKash's - if the two ever disagree the month still stays
+	// shut, because a settled transaction outranks a bookkeeping field.
 	const paidBill = await prisma.memberBill.findFirst({
-		where: { cycleId, paidAmount: { gt: 0 } },
+		where: {
+			cycleId,
+			OR: [
+				{ paidAmount: { gt: 0 } },
+				{ payments: { some: { status: PaymentStatus.PAID } } },
+			],
+		},
 		select: { id: true },
 	});
 

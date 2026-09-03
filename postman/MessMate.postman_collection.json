@@ -56,6 +56,46 @@
     {
       "key": "otp",
       "value": ""
+    },
+    {
+      "key": "cycleId",
+      "value": ""
+    },
+    {
+      "key": "mealId",
+      "value": ""
+    },
+    {
+      "key": "expenseId",
+      "value": ""
+    },
+    {
+      "key": "dutyId",
+      "value": ""
+    },
+    {
+      "key": "depositId",
+      "value": ""
+    },
+    {
+      "key": "billId",
+      "value": ""
+    },
+    {
+      "key": "managerBillId",
+      "value": ""
+    },
+    {
+      "key": "paymentId",
+      "value": ""
+    },
+    {
+      "key": "lateDate",
+      "value": ""
+    },
+    {
+      "key": "runId",
+      "value": ""
     }
   ],
   "item": [
@@ -215,9 +255,13 @@
                 "exec": [
                   "const res = pm.response.json();",
                   "if (res?.data?.accessToken) {",
-                  "  pm.collectionVariables.set('managerToken', res.data.accessToken);",
-                  "  console.log('managerToken saved');",
-                  "}"
+                  "  pm.collectionVariables.set(\"managerToken\", res.data.accessToken);",
+                  "  console.log(\"managerToken saved\");",
+                  "}",
+                  "",
+                  "// Stamped once per run so Create mess below never collides with the mess a",
+                  "// previous run left behind.",
+                  "pm.collectionVariables.set(\"runId\", String(Date.now()).slice(-6));"
                 ]
               }
             }
@@ -452,7 +496,8 @@
             }
           }
         }
-      ]
+      ],
+      "description": "**Running this folder repeatedly:** /api/v1/auth is rate limited to 30 requests per 15 minutes, much tighter than the 300 everything else gets, because login and register are the brute-force targets. A full collection run spends about eight of those, so three runs back to back start answering 429. That is the limiter working, not a broken collection - wait out the window."
     },
     {
       "name": "User",
@@ -523,7 +568,7 @@
                 "profile-image"
               ]
             },
-            "description": "Multipart form-data with a file in the `avatar` field. Max 5 MB, held in memory and streamed straight to Cloudinary.\n\nReplacing a picture deletes the previous file, but only after the new one is saved - doing it first would leave the account with no picture if the upload then failed.\n\nIn Postman: Body tab -> form-data -> key `avatar`, change the type dropdown from Text to File, then pick an image."
+            "description": "**Manual step** - a real file has to be picked in the Body tab, so a collection run skips this one.\n\nMultipart form-data with a file in the `avatar` field. Max 5 MB, held in memory and streamed straight to Cloudinary.\n\nReplacing a picture deletes the previous file, but only after the new one is saved - doing it first would leave the account with no picture if the upload then failed.\n\nIn Postman: Body tab -> form-data -> key `avatar`, change the type dropdown from Text to File, then pick an image."
           }
         },
         {
@@ -548,7 +593,7 @@
                 "profile-image"
               ]
             },
-            "description": "Clears avatarUrl and avatarPublicId and deletes the file from Cloudinary. Returns 404 if there was no picture to begin with."
+            "description": "**Manual step** - only works after the upload above, which needs a file picked by hand.\n\nClears avatarUrl and avatarPublicId and deletes the file from Cloudinary. Returns 404 if there was no picture to begin with."
           }
         }
       ]
@@ -587,7 +632,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"GEC Chattogram Mess\",\n  \"address\": \"GEC Circle, Chattogram\",\n  \"monthlyRent\": 24000\n}"
+              "raw": "{\n  \"name\": \"GEC Chattogram Mess {{runId}}\",\n  \"address\": \"GEC Circle, Chattogram\",\n  \"monthlyRent\": 24000\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/mess/create-mess",
@@ -601,7 +646,7 @@
                 "create-mess"
               ]
             },
-            "description": "Creates the mess AND the manager own membership in one transaction. A manager who is not a member would drop out of every settlement.\n\nSaves `messId` automatically."
+            "description": "Creates the mess AND the manager own membership in one transaction. A manager who is not a member would drop out of every settlement.\n\nSaves `messId` automatically.\n\nThe name carries a per-run stamp from the Login (Manager) script. A manager cannot hold two messes with the same name, so a fixed name would make this collection runnable exactly once."
           }
         },
         {
@@ -901,6 +946,1360 @@
               ]
             },
             "description": "A member sees only their own memberships, never anyone else."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Cycle",
+      "description": "One billing cycle = one calendar month of one mess. OPEN while meals, expenses, deposits and grocery duty are recorded; close-cycle runs the settlement and CLOSES it.",
+      "item": [
+        {
+          "name": "Open cycle (Manager)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res?.data?.id) {",
+                  "  pm.collectionVariables.set('cycleId', res?.data?.id);",
+                  "  console.log('cycleId saved:', res?.data?.id);",
+                  "}",
+                  "",
+                  "// The cutoff demo further down has to aim at a date the member has already",
+                  "// joined for. Today is the only one that qualifies: anything earlier trips",
+                  "// the join-date guard first and answers 400 instead of the 409 it means to show.",
+                  "pm.collectionVariables.set('lateDate', new Date().toISOString().slice(0, 10));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"messId\": \"{{messId}}\",\n  \"year\": 2026,\n  \"month\": 9\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/cycle/open-cycle",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "cycle",
+                "open-cycle"
+              ]
+            },
+            "description": "Only one cycle may be OPEN per mess at a time. Saves `cycleId` automatically."
+          }
+        },
+        {
+          "name": "Get mess cycles",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/cycle/mess-cycles/{{messId}}?page=1&limit=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "cycle",
+                "mess-cycles",
+                "{{messId}}?page=1&limit=10"
+              ]
+            },
+            "description": "Paginated, filterable by status and year."
+          }
+        },
+        {
+          "name": "Get single cycle",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/cycle/{{cycleId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "cycle",
+                "{{cycleId}}"
+              ]
+            },
+            "description": "Includes a live summary: running meal count, grocery total and meal rate while the cycle is still OPEN."
+          }
+        },
+        {
+          "name": "Close cycle (Manager) - runs the settlement",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/cycle/close-cycle/{{cycleId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "cycle",
+                "close-cycle",
+                "{{cycleId}}"
+              ]
+            },
+            "description": "The graded core: computes the meal rate, splits every shared expense, prorates rent by tenure, credits deposits and self-paid expenses, and writes one MemberBill per member. Uses a conditional update so firing this twice at once yields one 200 and one 409, never two sets of bills."
+          }
+        },
+        {
+          "name": "Reopen cycle (Admin only)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/cycle/reopen-cycle/{{cycleId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "cycle",
+                "reopen-cycle",
+                "{{cycleId}}"
+              ]
+            },
+            "description": "Deletes the generated bills and reopens the month. Refused once any bill has a payment against it."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Meal",
+      "description": "The daily register: how many lunches and dinners each member actually ate. This is what the settlement charges for - see Meal Plan for what members declare in advance.",
+      "item": [
+        {
+          "name": "Add daily meals (Manager) - bulk",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res?.data?.[0]?.id) {",
+                  "  pm.collectionVariables.set('mealId', res.data[0].id);",
+                  "  console.log('mealId saved:', res.data[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cycleId\": \"{{cycleId}}\",\n  \"date\": \"2026-09-05\",\n  \"entries\": [\n    { \"memberId\": \"{{memberId}}\", \"lunch\": 1, \"dinner\": 1 }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/meal/add-daily-meals",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "meal",
+                "add-daily-meals"
+              ]
+            },
+            "description": "One call records the whole mess for one day. Re-sending the same member+date is a correction (upsert), not a duplicate - and restores a soft-deleted entry instead of erroring on the unique constraint. Refused once the cycle is CLOSED."
+          }
+        },
+        {
+          "name": "Get cycle meals",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/meal/cycle-meals/{{cycleId}}?page=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "meal",
+                "cycle-meals",
+                "{{cycleId}}?page=1&limit=20"
+              ]
+            },
+            "description": "Readable by the whole mess - the register is the wall chart everyone checks. Filter by `date` or `memberId`."
+          }
+        },
+        {
+          "name": "Get meal summary",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/meal/meal-summary/{{cycleId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "meal",
+                "meal-summary",
+                "{{cycleId}}"
+              ]
+            },
+            "description": "The ledger page this project replaces: every member's lunch/dinner/total, the mess total, and the running meal rate (grocery so far / meals so far)."
+          }
+        },
+        {
+          "name": "Update meal (Manager)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"lunch\": 1,\n  \"dinner\": 0\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/meal/update-meal/{{mealId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "meal",
+                "update-meal",
+                "{{mealId}}"
+              ]
+            },
+            "description": "Refused once the cycle is CLOSED."
+          }
+        },
+        {
+          "name": "Delete meal (soft)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/meal/delete-meal/{{mealId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "meal",
+                "delete-meal",
+                "{{mealId}}"
+              ]
+            },
+            "description": "Soft delete - the row stays so the unique slot is preserved and re-recording the same day restores it rather than duplicating."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Meal Plan",
+      "description": "What a member declares they will eat, ahead of time, so whoever is on grocery duty knows the headcount. Declaring for a day closes at 11 PM Dhaka time the night before - the 4th must be declared by 11 PM on the 3rd, never on the 4th itself.",
+      "item": [
+        {
+          "name": "Set my plan (Member) - before the cutoff",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{memberToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cycleId\": \"{{cycleId}}\",\n  \"days\": [\n    { \"date\": \"2026-09-20\", \"lunch\": 1, \"dinner\": 1 },\n    { \"date\": \"2026-09-21\", \"lunch\": 0, \"dinner\": 1 }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/meal-plan/set-my-plan",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "meal-plan",
+                "set-my-plan"
+              ]
+            },
+            "description": "A member plans only for themselves; a manager may name someone else via `memberId`, or omit it to plan their own meals - the manager lives in the mess too. Pick dates a few days out so the 11 PM cutoff has not passed yet."
+          }
+        },
+        {
+          "name": "409 - set my plan after the cutoff",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{memberToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cycleId\": \"{{cycleId}}\",\n  \"days\": [\n    {\n      \"date\": \"{{lateDate}}\",\n      \"lunch\": 1,\n      \"dinner\": 1\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/meal-plan/set-my-plan",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "meal-plan",
+                "set-my-plan"
+              ]
+            },
+            "description": "Planning for today is always past its own cutoff - the deadline was 11 PM Dhaka time last night. Returns 409 naming the exact deadline that was missed.\n\nThe date comes from `{{lateDate}}`, set to today by the Open cycle script, because a hard-coded past date would trip the join-date guard instead and answer 400."
+          }
+        },
+        {
+          "name": "Get my calendar",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{memberToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/meal-plan/my-calendar/{{cycleId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "meal-plan",
+                "my-calendar",
+                "{{cycleId}}"
+              ]
+            },
+            "description": "Every day of the month, planned or not, each marked isLocked so a client can grey out days that can no longer be changed."
+          }
+        },
+        {
+          "name": "Get cycle calendar",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{memberToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/meal-plan/cycle-calendar/{{cycleId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "meal-plan",
+                "cycle-calendar",
+                "{{cycleId}}"
+              ]
+            },
+            "description": "Open to the whole mess, not just the manager: whoever is on grocery duty needs the day's headcount to shop correctly."
+          }
+        },
+        {
+          "name": "Apply plan to register (Manager)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cycleId\": \"{{cycleId}}\",\n  \"date\": \"2026-09-20\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/meal-plan/apply-to-register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "meal-plan",
+                "apply-to-register"
+              ]
+            },
+            "description": "Copies one day's declarations into the actual MealEntry register as a starting point. Never overwrites an entry that already exists - a correction the manager already made is not undone."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Expense",
+      "description": "Every cost of the month. GROCERY sets the meal rate; everything except GROCERY and RENT is a shared cost split EQUAL or BY_MEAL; RENT is prorated by tenure at settlement.",
+      "item": [
+        {
+          "name": "Add expense - JSON, no receipt",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res?.data?.id) {",
+                  "  pm.collectionVariables.set('expenseId', res?.data?.id);",
+                  "  console.log('expenseId saved:', res?.data?.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cycleId\": \"{{cycleId}}\",\n  \"type\": \"GROCERY\",\n  \"amount\": 9000,\n  \"splitMethod\": \"EQUAL\",\n  \"spentAt\": \"2026-09-15\",\n  \"description\": \"Weekly bazar\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/expense/add-expense",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "expense",
+                "add-expense"
+              ]
+            },
+            "description": "The receipt photo is optional - most expenses are entered from memory. This request has no file, so it is plain JSON."
+          }
+        },
+        {
+          "name": "Add expense - with receipt photo",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "cycleId",
+                  "value": "{{cycleId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "type",
+                  "value": "ELECTRICITY",
+                  "type": "text"
+                },
+                {
+                  "key": "amount",
+                  "value": "600",
+                  "type": "text"
+                },
+                {
+                  "key": "splitMethod",
+                  "value": "EQUAL",
+                  "type": "text"
+                },
+                {
+                  "key": "spentAt",
+                  "value": "2026-09-15",
+                  "type": "text"
+                },
+                {
+                  "key": "receipt",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/expense/add-expense",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "expense",
+                "add-expense"
+              ]
+            },
+            "description": "**Manual step** - a real file has to be picked in the Body tab, so a collection run skips this one.\n\nMultipart form-data with a file in the `receipt` field, uploaded to Cloudinary. In Postman: Body -> form-data -> key `receipt` -> change type from Text to File."
+          }
+        },
+        {
+          "name": "Get cycle expenses",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/expense/cycle-expenses/{{cycleId}}?page=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "expense",
+                "cycle-expenses",
+                "{{cycleId}}?page=1&limit=20"
+              ]
+            },
+            "description": "Readable by everyone in the mess - these are the exact numbers each member is about to be billed from. Filter by `type`, `paidByMemberId`, or `searchTerm`."
+          }
+        },
+        {
+          "name": "Get expense summary",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/expense/expense-summary/{{cycleId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "expense",
+                "expense-summary",
+                "{{cycleId}}"
+              ]
+            },
+            "description": "Grouped the way the settlement uses it: grocery total, rent, shared total, running meal rate, and who has paid for what (their settlement credit)."
+          }
+        },
+        {
+          "name": "Update expense (Manager)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 650\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/expense/update-expense/{{expenseId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "expense",
+                "update-expense",
+                "{{expenseId}}"
+              ]
+            },
+            "description": "Refused once the cycle is CLOSED. A new receipt file replaces the old one only after the upload succeeds; the old Cloudinary file is then deleted."
+          }
+        },
+        {
+          "name": "Delete expense (soft)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/expense/delete-expense/{{expenseId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "expense",
+                "delete-expense",
+                "{{expenseId}}"
+              ]
+            },
+            "description": "Audited as EXPENSE_DELETED - removing an expense changes what every member in the mess owes."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Grocery Duty",
+      "description": "Works like a booking system: the manager books one member for a date range of any length - four days for one person, six for the next - the same way a hotel booking picks check-in and check-out. There is no auto-generator; the calendar is built one booking at a time.",
+      "item": [
+        {
+          "name": "Assign duty (Manager) - a booking",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res?.data?.id) {",
+                  "  pm.collectionVariables.set('dutyId', res?.data?.id);",
+                  "  console.log('dutyId saved:', res?.data?.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cycleId\": \"{{cycleId}}\",\n  \"memberId\": \"{{memberId}}\",\n  \"startDate\": \"2026-09-01\",\n  \"endDate\": \"2026-09-04\",\n  \"note\": \"First turn of the month\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/grocery-duty/assign-duty",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "grocery-duty",
+                "assign-duty"
+              ]
+            },
+            "description": "Any member of the mess, any date range inside the cycle month, any length. Rejected with 409 if it overlaps an existing booking - two people cannot both be on duty the same day."
+          }
+        },
+        {
+          "name": "Get cycle duties - raw list",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/grocery-duty/cycle-duties/{{cycleId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "grocery-duty",
+                "cycle-duties",
+                "{{cycleId}}"
+              ]
+            },
+            "description": "Readable by the whole mess. The bookings as ranges, in date order."
+          }
+        },
+        {
+          "name": "Get cycle calendar - day by day",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/grocery-duty/cycle-calendar/{{cycleId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "grocery-duty",
+                "cycle-calendar",
+                "{{cycleId}}"
+              ]
+            },
+            "description": "The same bookings expanded to one row per calendar day, with unbooked days marked null - what a calendar UI renders directly."
+          }
+        },
+        {
+          "name": "Get my duty days",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{memberToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/grocery-duty/my-duty-days/{{cycleId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "grocery-duty",
+                "my-duty-days",
+                "{{cycleId}}"
+              ]
+            },
+            "description": "Answers 'this month, how many days did I do?' for the caller - total days plus the individual bookings they came from. Works for the manager too, since they have a membership in their own mess."
+          }
+        },
+        {
+          "name": "Update duty (Manager)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"note\": \"Swapped with Tarek\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/grocery-duty/update-duty/{{dutyId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "grocery-duty",
+                "update-duty",
+                "{{dutyId}}"
+              ]
+            },
+            "description": "Swap the member or change the dates. Re-checked against the month bounds and every other booking for an overlap."
+          }
+        },
+        {
+          "name": "Remove duty (Manager)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/grocery-duty/remove-duty/{{dutyId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "grocery-duty",
+                "remove-duty",
+                "{{dutyId}}"
+              ]
+            },
+            "description": "Hard delete - a rota entry carries no financial history the way a meal or an expense does."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Deposit",
+      "description": "Cash a member hands the manager during the month, before any bill exists. Becomes settlement credit automatically - see the dueAmount drop in Cycle / Close cycle after adding one.",
+      "item": [
+        {
+          "name": "Add deposit (Manager)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res?.data?.id) {",
+                  "  pm.collectionVariables.set('depositId', res?.data?.id);",
+                  "  console.log('depositId saved:', res?.data?.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cycleId\": \"{{cycleId}}\",\n  \"memberId\": \"{{memberId}}\",\n  \"amount\": 2000,\n  \"note\": \"Advance for September\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/deposit/add-deposit",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "deposit",
+                "add-deposit"
+              ]
+            },
+            "description": "Refused once the cycle is CLOSED."
+          }
+        },
+        {
+          "name": "Get cycle deposits",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/deposit/cycle-deposits/{{cycleId}}?page=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "deposit",
+                "cycle-deposits",
+                "{{cycleId}}?page=1&limit=20"
+              ]
+            },
+            "description": "Readable by everyone in the mess - this is what lets a member confirm the cash they handed over actually got recorded. Filter by `memberId`."
+          }
+        },
+        {
+          "name": "Update deposit (Manager)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 2500\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/deposit/update-deposit/{{depositId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "deposit",
+                "update-deposit",
+                "{{depositId}}"
+              ]
+            },
+            "description": "Refused once the cycle is CLOSED."
+          }
+        },
+        {
+          "name": "Delete deposit (soft)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/deposit/delete-deposit/{{depositId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "deposit",
+                "delete-deposit",
+                "{{depositId}}"
+              ]
+            },
+            "description": "Audited as DEPOSIT_DELETED - removing it takes credit away from whoever it belonged to."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Payment",
+      "description": "bKash tokenized checkout against a settled bill.\n\nThe amount always comes from the bill row, never from the request body. The callback is a public GET whose query string arrives through the user's browser, so nothing it claims is believed: every callback calls bKash's execute endpoint and settles only when the reply says statusCode 0000, transactionStatus Completed, currency BDT and an amount matching the row we created. Settlement runs behind a conditional update, so a browser refresh that fires the callback three times still credits the bill once.\n\nActually paying requires opening the returned paymentUrl in a browser and completing the sandbox wallet flow - that part cannot be automated, and it is what the demo video shows.",
+      "item": [
+        {
+          "name": "Close cycle (Manager) - bills are what payment needs",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/cycle/close-cycle/{{cycleId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "cycle",
+                "close-cycle",
+                "{{cycleId}}"
+              ]
+            },
+            "description": "Payment has nothing to act on until settlement has produced a bill. The Cycle folder reopened this month so the meal, expense, duty and deposit folders could write to it; closing it again here regenerates the bills the requests below pay against."
+          }
+        },
+        {
+          "name": "Get my bills (Member)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{memberToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payment/my-bills",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payment",
+                "my-bills"
+              ]
+            },
+            "description": "Where a member finds the billId they hand to create-payment. One row per cycle: meal count, meal cost, shared cost, prorated rent, credit from deposits and self-paid expenses, and what is left to pay.\n\nA negative dueAmount is not an error - it means this member fronted more grocery money than they ate, and the mess owes them."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "const cycleId = pm.collectionVariables.get(\"cycleId\");",
+                  "const mine = res?.data?.find((b) => b.cycle?.id === cycleId && Number(b.dueAmount) > 0);",
+                  "if (mine) {",
+                  "  pm.collectionVariables.set(\"billId\", mine.id);",
+                  "  console.log(\"billId saved:\", mine.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get my bills (Manager) - the manager gets one too",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payment/my-bills",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payment",
+                "my-bills"
+              ]
+            },
+            "description": "The manager lives in the mess like everyone else: they eat the meals, take their turn at the grocery run, and settlement bills them the same way. Managing is extra responsibility, not a different kind of residency.\n\nSaves the manager's bill id so the 403 below has something real to aim at."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "const cycleId = pm.collectionVariables.get(\"cycleId\");",
+                  "const theirs = res?.data?.find((b) => b.cycle?.id === cycleId);",
+                  "if (theirs) {",
+                  "  pm.collectionVariables.set(\"managerBillId\", theirs.id);",
+                  "  console.log(\"managerBillId saved:\", theirs.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create payment (Member) - starts a real bKash checkout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{memberToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"billId\": \"{{billId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payment/create-payment",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payment",
+                "create-payment"
+              ]
+            },
+            "description": "The body carries only the bill id. The amount is read from the bill row - an amount arriving from the client is how a member pays 1 taka against a 4000 taka bill.\n\nThe Payment row is created and committed before bKash is called, never inside the transaction: a network round trip holding a database connection open dies with the gateway. If the call then fails the row simply stays UNPAID, which is the correct record of what happened.\n\nReturns a real sandbox paymentUrl. Open it in a browser to actually pay; bKash then sends the browser to the callback."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res?.data?.paymentId) {",
+                  "  pm.collectionVariables.set('paymentId', res.data.paymentId);",
+                  "  console.log('paymentId saved:', res.data.paymentId);",
+                  "  console.log('pay here:', res.data.paymentUrl);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get my payments (Member)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{memberToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payment/my-payments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payment",
+                "my-payments"
+              ]
+            },
+            "description": "Every checkout attempt this member has made, across every mess they live in. A bill can have several: an abandoned try, then a real one. Only rows in PAID carry a bkashTrxId, and that field is the evidence that money actually moved."
+          }
+        },
+        {
+          "name": "Get single payment",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{memberToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payment/{{paymentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payment",
+                "{{paymentId}}"
+              ]
+            },
+            "description": "Someone else's payment is a 403 even with a perfectly valid token for the same mess."
+          }
+        },
+        {
+          "name": "302 - callback with a paymentID we never issued",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payment/callback?paymentID=TR0000FORGEDID&status=success",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payment",
+                "callback"
+              ],
+              "query": [
+                {
+                  "key": "paymentID",
+                  "value": "TR0000FORGEDID"
+                },
+                {
+                  "key": "status",
+                  "value": "success"
+                }
+              ]
+            },
+            "description": "`status=success` in the query string is a rumour that arrived through someone's address bar. The service looks the paymentID up, finds nothing it issued, and settles nothing.\n\nIt still redirects rather than erroring - every callback path does, because a member who really paid must never be shown a failure. Turn off Settings -> Automatically follow redirects to see the 302 itself."
+          }
+        },
+        {
+          "name": "403 - pay a bill that is not yours",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{memberToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"billId\": \"{{managerBillId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payment/create-payment",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payment",
+                "create-payment"
+              ]
+            },
+            "description": "Two separate questions get asked: is this caller in that mess at all, and is this particular bill theirs. A valid token for the mess answers only the first."
+          }
+        },
+        {
+          "name": "404 - pay a bill that does not exist",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{memberToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"billId\": \"00000000-0000-0000-0000-000000000000\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payment/create-payment",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payment",
+                "create-payment"
+              ]
+            },
+            "description": "A well-formed id that belongs to nothing."
           }
         }
       ]
@@ -1243,8 +2642,34 @@
     },
     {
       "name": "Cleanup",
-      "description": "Run last. Removes the demo mess created at the top of the collection.",
+      "description": "Runs last, and in this exact order for a reason. Removing a member is refused while they still owe money, and deleting a mess is refused while any cycle is still OPEN - two rules that pull in opposite directions, so the cycle is reopened, the member released, and the cycle closed again before the mess goes.",
       "item": [
+        {
+          "name": "Reopen cycle (Admin) - clears the generated bills",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/cycle/reopen-cycle/{{cycleId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "cycle",
+                "reopen-cycle",
+                "{{cycleId}}"
+              ]
+            },
+            "description": "Removing a member is refused while they have an unpaid bill, and closing the month is what generated that bill. Reopening deletes the bills so the settlement can be regenerated, which also releases the member.\n\nRefused outright once a payment has actually settled against the month - at that point the ledger has left the building, and rewriting it would contradict a real bKash transaction. Abandoned checkout attempts go with the bills they belonged to; a settled one can never reach here."
+          }
+        },
         {
           "name": "Remove member (Manager)",
           "request": {
@@ -1269,6 +2694,32 @@
               ]
             },
             "description": "Sets status LEFT with leftAt rather than deleting, so their meals and expenses stay attached to the months they belong to and rent stays prorated to the day they left.\n\nRefuses with 409 if they still have an unpaid bill. Writes a MEMBER_REMOVED audit row inside the same transaction.\n\nKept in Cleanup on purpose: it sets the member to LEFT, and the duplicate-add case in Error cases expects them to still be ACTIVE. Running it earlier turns that 409 into a 201, because re-adding someone who left restores their old membership row instead of conflicting."
+          }
+        },
+        {
+          "name": "Close cycle (Manager) - nothing may be left OPEN",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/cycle/close-cycle/{{cycleId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "cycle",
+                "close-cycle",
+                "{{cycleId}}"
+              ]
+            },
+            "description": "The delete below refuses while any billing cycle is still OPEN, because deleting would strand every meal and expense recorded in it. This closes the month the reopen above put back into edit."
           }
         },
         {
