@@ -36,7 +36,7 @@ Created automatically at server boot by `src/app/utils/seed.ts`.
 | JWT + bcryptjs | Auth + password hashing |
 | Google Identity (`google-auth-library`) | GCP social login |
 | Zod | Request validation |
-| Redis | bKash token cache, OTP state, read cache |
+| Redis | bKash token cache, OTP state, read cache, rate-limit counters |
 | bKash Tokenized Checkout | Payment |
 | Nodemailer + EJS | OTP and password-reset emails |
 | Cloudinary + Multer | Avatars and expense receipts |
@@ -286,11 +286,80 @@ Server starts at `http://localhost:5000`.
 | Command | Does |
 | --- | --- |
 | `pnpm dev` | tsx watch, port 5000 |
-| `pnpm build` | tsc → `dist/` |
-| `pnpm start` | run the compiled build |
+| `pnpm build` | `prisma generate` + `prisma migrate deploy` — the deploy step |
+| `pnpm start` | run the server (tsx) |
+| `pnpm typecheck` | `tsc --noEmit` |
 | `pnpm check:settlement` | assert the settlement math balances |
 | `pnpm lint:check` / `lint:fix` | Biome lint |
 | `pnpm format:check` / `format:fix` | Biome format |
+
+The server runs through `tsx` rather than a compiled `dist/`. This project is
+ESM (`"type": "module"`) with `moduleResolution: "bundler"`, so TypeScript
+accepts extensionless relative imports that Node's own ESM loader rejects —
+`node dist/src/server.js` dies on the first directory import. Adding `.js` to
+every relative import across sixty files would be the alternative; running the
+TypeScript directly is one line and is what every test in this repo already
+exercises.
+
+---
+
+## ☁️ Deployment (Vercel)
+
+**Two entry points, one app.** `src/server.ts` is the local and container entry —
+it opens the connections, seeds the demo accounts and calls `app.listen()`.
+`api/index.ts` is the serverless entry, and it only exports the Express app from
+`src/app.ts`. Everything global — middleware order, route mounting — lives in
+`src/app.ts` so both entries behave identically. `vercel.json` routes every path
+to `api/index.ts`.
+
+```
+POST /api/v1/...  →  vercel.json  →  api/index.ts  →  src/app.ts
+pnpm start        →  src/server.ts (app.listen)   →  src/app.ts
+```
+
+`prisma generate` runs from `postinstall`, not from `build`: with a `builds`
+array in `vercel.json` the platform hands the whole build to `@vercel/node` and
+never runs the project's build script, and the generated client is gitignored.
+
+Set every variable from `.env.example` in the Vercel dashboard. Three **must**
+change from their local values:
+
+| Variable | Production value |
+| --- | --- |
+| `BACKEND_URL` | `https://<project>.vercel.app` |
+| `BKASH_CALLBACK_URL` | `https://<project>.vercel.app/api/v1` |
+| `FRONTEND_URL` | wherever the browser should land after paying |
+
+`BKASH_CALLBACK_URL` is the one that silently ruins a demo: leave it on localhost
+and bKash sends the browser to a machine it cannot reach, so the payment is taken
+and never settled. Do **not** set `PORT` — the platform owns it.
+
+### What serverless changed
+
+Three things had to be true before this app could run on short-lived, stateless
+instances:
+
+- **No in-process state.** The rate limiter's counters were a `Map` in one
+  process, which is only correct while there is exactly one process. They live in
+  Redis now — otherwise "30 auth attempts per 15 minutes" quietly becomes "30 per
+  instance" and spreads a brute-force attempt across cold starts.
+- **Connections open themselves.** `server.ts` opened Redis at boot, but nothing
+  runs `server.ts` on a serverless invocation. Worse, the rate limiter's store
+  sends its first command while `app.ts` is still being imported — before any
+  entry point could connect. `ensureRedis()` in `src/app/lib/redis.ts` is
+  idempotent and safe to call concurrently, so whoever needs Redis first opens it.
+- **Uploads fit the platform.** Multer's limit is 4 MB, under Vercel's 4.5 MB
+  request-body cap. A larger limit would be a lie: the platform rejects the
+  request before multer ever sees it. Files go straight from memory to Cloudinary,
+  so nothing ever touches a filesystem.
+
+Nothing here is Vercel-specific in a way that traps the project: `pnpm start`
+still runs the same app on any container host, so Render remains a fallback with
+build `pnpm install && pnpm build` and start `pnpm start`.
+
+Migrations are the one manual step — `builds` skips the build script, so run
+`pnpm build` (or `npx prisma migrate deploy`) locally against the production
+database after any schema change.
 
 ---
 
