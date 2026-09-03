@@ -12,6 +12,7 @@ import { globalErrorHandler } from "./app/middleware/globalErrorHandler";
 import { notFound } from "./app/middleware/notFound";
 import { authLimiter, generalLimiter } from "./app/middleware/rateLimiter";
 import { AuthRoutes } from "./app/module/auth/auth.route";
+import { CycleRoutes } from "./app/module/cycle/cycle.route";
 import { MemberRoutes } from "./app/module/member/member.route";
 import { MessRoutes } from "./app/module/mess/mess.route";
 import { UserRoutes } from "./app/module/user/user.route";
@@ -39,6 +40,7 @@ app.use("/api/v1/auth", AuthRoutes);
 app.use("/api/v1/mess", MessRoutes);
 app.use("/api/v1/member", MemberRoutes);
 app.use("/api/v1/user", UserRoutes);
+app.use("/api/v1/cycle", CycleRoutes);
 
 // Basic route
 app.get("/", async (_req: Request, res: Response) => {
