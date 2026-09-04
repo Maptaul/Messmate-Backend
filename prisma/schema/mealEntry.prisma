@@ -1,5 +1,3 @@
-// One row per member per day. Counts rather than booleans, so guest meals work.
-// Breakfast is not tracked - this mess eats lunch and dinner only.
 model MealEntry {
   id String @id @default(uuid())
 
@@ -19,8 +17,6 @@ model MealEntry {
   memberId String
   member   MessMember @relation(fields: [memberId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
-  // A soft-deleted row still holds this slot, so re-creating a deleted entry
-  // must restore the row rather than insert a second one.
   @@unique([memberId, date])
   @@index([cycleId, date])
   @@index([cycleId, isDeleted])

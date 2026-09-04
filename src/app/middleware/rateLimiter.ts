@@ -29,6 +29,7 @@ export const generalLimiter = rateLimit({
 	standardHeaders: "draft-7",
 	legacyHeaders: false,
 	store: redisStore("rl:general:"),
+	passOnStoreError: true,
 	skip: (req) =>
 		req.originalUrl.startsWith("/api/v1/auth") ||
 		req.originalUrl.startsWith("/api/v1/payment/callback"),
@@ -41,6 +42,7 @@ export const authLimiter = rateLimit({
 	standardHeaders: "draft-7",
 	legacyHeaders: false,
 	store: redisStore("rl:auth:"),
+	passOnStoreError: true,
 	message: tooManyRequests(
 		"Too many authentication attempts. Please try again later.",
 	),

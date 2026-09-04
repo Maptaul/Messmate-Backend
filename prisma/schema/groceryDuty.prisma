@@ -1,7 +1,3 @@
-// Whose turn it is to do the grocery shopping, rotated through the members.
-// Duty is separate from who actually paid - the money side lives on
-// Expense.paidByMemberId, because the person on duty is not always the one
-// who fronts the cash.
 model GroceryDuty {
   id String @id @default(uuid())
 

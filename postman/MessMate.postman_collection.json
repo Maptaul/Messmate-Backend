@@ -2099,7 +2099,7 @@
                 "my-bills"
               ]
             },
-            "description": "The manager lives in the mess like everyone else: they eat the meals, take their turn at the grocery run, and settlement bills them the same way. Managing is extra responsibility, not a different kind of residency.\n\nSaves the manager's bill id so the 403 below has something real to aim at."
+            "description": "The manager lives in the mess like everyone else: they eat the meals, take their turn at the grocery run, and settlement bills them the same way.Saves the manager's bill id so the 403 below has something real to aim at."
           },
           "event": [
             {
@@ -2149,7 +2149,7 @@
                 "create-payment"
               ]
             },
-            "description": "The body carries only the bill id. The amount is read from the bill row - an amount arriving from the client is how a member pays 1 taka against a 4000 taka bill.\n\nThe Payment row is created and committed before bKash is called, never inside the transaction: a network round trip holding a database connection open dies with the gateway. If the call then fails the row simply stays UNPAID, which is the correct record of what happened.\n\nReturns a real sandbox paymentUrl. Open it in a browser to actually pay; bKash then sends the browser to the callback."
+            "description": "The body carries only the bill id.The Payment row is created and committed before bKash is called, never inside the transaction: a network round trip holding a database connection open dies with the gateway. If the call then fails the row simply stays UNPAID, which is the correct record of what happened.\n\nReturns a real sandbox paymentUrl. Open it in a browser to actually pay; bKash then sends the browser to the callback."
           },
           "event": [
             {
@@ -2245,7 +2245,7 @@
                 }
               ]
             },
-            "description": "`status=success` in the query string is a rumour that arrived through someone's address bar. The service looks the paymentID up, finds nothing it issued, and settles nothing.\n\nIt still redirects rather than erroring - every callback path does, because a member who really paid must never be shown a failure. Turn off Settings -> Automatically follow redirects to see the 302 itself."
+            "description": "The service looks the paymentID up, finds nothing it issued, and settles nothing.\n\nIt still redirects rather than erroring - every callback path does, because a member who really paid must never be shown a failure. Turn off Settings -> Automatically follow redirects to see the 302 itself."
           }
         },
         {
@@ -2342,7 +2342,7 @@
                 "dashboard-stats"
               ]
             },
-            "description": "Platform health in one call: users by role, blocked count, messes and active memberships, open and closed cycles, and the money — deposits taken, expenses recorded, payments actually settled through bKash, and what is still outstanding across every unpaid bill.\n\nEvery figure is a count or a sum with an index behind it, and they run together rather than in sequence. A dashboard that costs ten round trips is a dashboard nobody opens."
+            "description": "Platform health in one call: users by role, blocked count, messes and active memberships, open and closed cycles, and the money — deposits taken, expenses recorded, payments actually settled through bKash, and what is still outstanding across every unpaid bill.\n\nEvery figure is a count or a sum with an index behind it, and they run together rather than in sequence."
           }
         },
         {
@@ -2648,7 +2648,7 @@
                 }
               ]
             },
-            "description": "Everything money- or permission-shaped is written here as it happens — cycle closed and reopened, member removed, expense and deposit deleted, payment settled, role changed, user blocked and unblocked — each with the actor and the before/after state.\n\nFilterable by `action`, `entity`, `entityId` and `actorId`. A log that is written but never readable is only half a feature; this is the other half."
+            "description": "Everything money- or permission-shaped is written here as it happens — cycle closed and reopened, member removed, expense and deposit deleted, payment settled, role changed, user blocked and unblocked — each with the actor and the before/after state.\n\nFilterable by `action`, `entity`, `entityId` and `actorId`."
           }
         },
         {
@@ -3086,7 +3086,7 @@
                 "{{cycleId}}"
               ]
             },
-            "description": "Removing a member is refused while they have an unpaid bill, and closing the month is what generated that bill. Reopening deletes the bills so the settlement can be regenerated, which also releases the member.\n\nRefused outright once a payment has actually settled against the month - at that point the ledger has left the building, and rewriting it would contradict a real bKash transaction. Abandoned checkout attempts go with the bills they belonged to; a settled one can never reach here."
+            "description": "Removing a member is refused while they have an unpaid bill, and closing the month is what generated that bill. Reopening deletes the bills so the settlement can be regenerated, which also releases the member.Abandoned checkout attempts go with the bills they belonged to; a settled one can never reach here."
           }
         },
         {

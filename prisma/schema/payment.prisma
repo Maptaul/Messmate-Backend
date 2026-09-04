@@ -1,6 +1,3 @@
-// One bKash tokenized checkout attempt against a MemberBill.
-// A bill can have several: a failed attempt, then a successful one, or two
-// partial payments. Only rows in PAID count toward the bill balance.
 model Payment {
   id String @id @default(uuid())
 
@@ -22,11 +19,8 @@ model Payment {
   updatedAt DateTime @updatedAt
 
   billId String
-  // Cascade because reopening a cycle deletes its bills so the settlement can be
-  // regenerated. An abandoned checkout against a bill that no longer exists is
-  // noise; a settled one never reaches here, because reopen is already refused
-  // once any payment has landed against the cycle.
-  bill   MemberBill @relation(fields: [billId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  bill MemberBill @relation(fields: [billId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   memberId String
   member   MessMember @relation(fields: [memberId], references: [id], onUpdate: Cascade)

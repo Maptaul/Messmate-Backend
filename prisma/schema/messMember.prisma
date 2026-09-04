@@ -1,6 +1,3 @@
-// A person living in a mess. Kept separate from User because the same person
-// can join, leave, and rejoin, and every meal, bill and payment hangs off the
-// membership rather than the account.
 model MessMember {
   id String @id @default(uuid())
 

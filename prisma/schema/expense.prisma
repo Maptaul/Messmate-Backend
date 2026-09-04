@@ -1,5 +1,3 @@
-// Every cost of the month. GROCERY feeds the meal rate; the utility types are
-// shared costs split across members; RENT is prorated by tenure, not split flat.
 model Expense {
   id String @id @default(uuid())
 
@@ -9,8 +7,6 @@ model Expense {
   description String?     @db.VarChar(500)
   spentAt     DateTime
 
-  // Optional photo of the grocery slip or utility bill. Nullable because most
-  // expenses are entered from memory, without a receipt to hand.
   receiptUrl      String? @db.VarChar(500)
   receiptPublicId String? @db.VarChar(255)
 
@@ -23,7 +19,6 @@ model Expense {
   cycleId String
   cycle   BillingCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
-  // Who fronted the cash. Credited back to them at settlement.
   paidByMemberId String?
   paidByMember   MessMember? @relation("ExpensePaidBy", fields: [paidByMemberId], references: [id])
 

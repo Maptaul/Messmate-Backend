@@ -1,6 +1,3 @@
-// MessMate — Smart Mess & Shared Housing Management Platform
-// Split schema: enums.prisma + one file per domain. See .agents/rules/03-database.md
-
 generator client {
   provider = "prisma-client"
   output   = "../../src/generated/prisma"

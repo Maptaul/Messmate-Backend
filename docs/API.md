@@ -3,8 +3,7 @@
 **Base URL:** `https://messmatebackend.vercel.app`
 **Local:** `http://localhost:5000`
 
-62 endpoints across 12 modules, all versioned under `/api/v1`. The runnable
-version of this document is `postman/MessMate.postman_collection.json` — 91
+62 endpoints across 12 modules, all versioned under `/api/v1`. The runnable version of this reference is `postman/MessMate.postman_collection.json` — 91
 requests that chain their own tokens and ids, verified against the live
 deployment (83 passed, 0 failed, 8 manual).
 
@@ -19,9 +18,7 @@ Authorization: Bearer <accessToken>
 ```
 
 `POST /api/v1/auth/login` returns the access token and sets a refresh cookie.
-**Role and account status are re-read from the database on every request** — a
-token alone never proves what someone is allowed to do, so a demotion or a block
-takes effect immediately without waiting for the token to expire.
+**Role and account status are re-read from the database on every request**. A demotion or a block takes effect on the next request, without waiting for the token to expire.
 
 ### Demo accounts
 
@@ -225,11 +222,9 @@ bKash  -> GET /api/v1/payment/callback?paymentID=...&status=...
           -> 302 redirect back to the frontend
 ```
 
-The callback is a public GET whose query string arrives through the user's own
-browser, so nothing it claims is trusted. Settlement requires all four of
+The callback is a public GET whose query string arrives through the user browser, so its contents are not trusted. Settlement requires all four of
 `statusCode 0000`, `transactionStatus Completed`, `currency BDT` and an amount
-matching the row we created, and it runs behind a conditional update so a
-refreshed callback credits the bill once.
+matching the row we created. It runs behind a conditional update, so a refreshed callback credits the bill once.
 
 ---
 

@@ -1,5 +1,3 @@
-// Cash a member hands the manager during the month, before any bill exists.
-// Counts as credit at settlement. Online settlement of a bill is Payment.
 model Deposit {
   id String @id @default(uuid())
 

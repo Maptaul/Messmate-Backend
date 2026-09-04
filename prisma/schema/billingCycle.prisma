@@ -1,16 +1,13 @@
-// One billing cycle = one calendar month of one mess.
-// OPEN while meals and expenses are recorded, CLOSED once the settlement runs.
 model BillingCycle {
   id String @id @default(uuid())
 
   year   Int
-  month  Int // 1 - 12
+  month  Int
   status CycleStatus @default(OPEN)
 
-  // Filled in by the settlement at close time. Null while the cycle is OPEN.
   totalMeals   Int?
   totalGrocery Decimal?  @db.Decimal(12, 2)
-  mealRate     Decimal?  @db.Decimal(12, 4) // a rate needs more precision than a total
+  mealRate     Decimal?  @db.Decimal(12, 4)
   closedAt     DateTime?
 
   createdAt DateTime @default(now())
