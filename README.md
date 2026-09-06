@@ -14,44 +14,32 @@ bill, and who owes what at the end. MessMate turns that notebook into an API.
 
 ---
 
-## Demo Credentials
-
-| Role | Email | Password |
-| --- | --- | --- |
-| `ADMIN` | `admin@messmate.app` | see `.env` |
-| `MESS_MANAGER` | `manager@messmate.app` | see `.env` |
-| `MEMBER` | `member@messmate.app` | see `.env` |
-
-Seeded at server boot by `src/app/utils/seed.ts`.
-
----
-
 ## Tech Stack
 
-| Tech | Purpose |
-| --- | --- |
-| Node.js + Express 5 | REST API |
-| TypeScript (strict, ESM) | Type safety |
-| PostgreSQL + Prisma 7 (`@prisma/adapter-pg`) | Database + ORM |
-| JWT + bcryptjs | Auth + password hashing |
-| Google Identity (`google-auth-library`) | GCP social login |
-| Zod | Request validation |
-| Redis | bKash token cache, OTP state, read cache, rate-limit counters |
-| bKash Tokenized Checkout | Payment |
-| Nodemailer + EJS | OTP and password-reset emails |
-| Cloudinary + Multer | Avatars and expense receipts |
-| tsup | Bundles the serverless entry |
-| Biome | Lint + format |
+| Tech                                         | Purpose                                                       |
+| -------------------------------------------- | ------------------------------------------------------------- |
+| Node.js + Express 5                          | REST API                                                      |
+| TypeScript (strict, ESM)                     | Type safety                                                   |
+| PostgreSQL + Prisma 7 (`@prisma/adapter-pg`) | Database + ORM                                                |
+| JWT + bcryptjs                               | Auth + password hashing                                       |
+| Google Identity (`google-auth-library`)      | GCP social login                                              |
+| Zod                                          | Request validation                                            |
+| Redis                                        | bKash token cache, OTP state, read cache, rate-limit counters |
+| bKash Tokenized Checkout                     | Payment                                                       |
+| Nodemailer + EJS                             | OTP and password-reset emails                                 |
+| Cloudinary + Multer                          | Avatars and expense receipts                                  |
+| tsup                                         | Bundles the serverless entry                                  |
+| Biome                                        | Lint + format                                                 |
 
 ---
 
 ## The Three Roles
 
-| Role | Can do |
-| --- | --- |
-| **ADMIN** | Platform operator. All messes and users, role changes, block/unblock, audit logs, dashboard stats, force-reopen a closed cycle. Not a resident of any mess. |
-| **MESS_MANAGER** | Owns messes. Members, meals, expenses, deposits, grocery-duty bookings, and closing the month — for their own messes only. |
-| **MEMBER** | Declares their own meal plan and pays their own bill. Reads the shared ledger: meals, expenses, deposits and duty for the whole mess. |
+| Role             | Can do                                                                                                                                                      |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **ADMIN**        | Platform operator. All messes and users, role changes, block/unblock, audit logs, dashboard stats, force-reopen a closed cycle. Not a resident of any mess. |
+| **MESS_MANAGER** | Owns messes. Members, meals, expenses, deposits, grocery-duty bookings, and closing the month — for their own messes only.                                  |
+| **MEMBER**       | Declares their own meal plan and pays their own bill. Reads the shared ledger: meals, expenses, deposits and duty for the whole mess.                       |
 
 Authorization is two layers. `auth(...)` checks the account type;
 `checkMessAccess` checks that the mess belongs to the caller. Any route taking a
@@ -117,17 +105,19 @@ and `my-duty-days` totals what each person did.
 
 ## Database
 
-11 models, one per schema file under `prisma/schema/`:
+12 models, one per schema file under `prisma/schema/`:
 
-`User` · `Mess` · `MessMember` · `BillingCycle` · `MealEntry` · `Expense` ·
-`Deposit` · `GroceryDuty` · `MemberBill` · `Payment` · `AuditLog`
+`User` · `Mess` · `MessMember` · `BillingCycle` · `MealEntry` · `MealPlan` ·
+`Expense` · `Deposit` · `GroceryDuty` · `MemberBill` · `Payment` · `AuditLog`
 
-| Constraint | Prevents |
-| --- | --- |
-| `BillingCycle(messId, year, month)` | two ledgers for one month |
-| `MealEntry(memberId, date)` | double-counting a day |
-| `MemberBill(cycleId, memberId)` | two bills for one member |
-| `Payment.bkashPaymentId` | a replayed callback creating a second payment |
+Entity relationships and the reasoning behind them: **[docs/ERD.md](docs/ERD.md)**.
+
+| Constraint                          | Prevents                                      |
+| ----------------------------------- | --------------------------------------------- |
+| `BillingCycle(messId, year, month)` | two ledgers for one month                     |
+| `MealEntry(memberId, date)`         | double-counting a day                         |
+| `MemberBill(cycleId, memberId)`     | two bills for one member                      |
+| `Payment.bkashPaymentId`            | a replayed callback creating a second payment |
 
 Money is `Decimal`, never `Float`. Nothing is hard-deleted — `isDeleted` +
 `deletedAt`, and every read filters them out.
@@ -143,11 +133,11 @@ path: reopen is refused once any payment lands against the month.
 Three reads are cached in Redis — the ones that are expensive and identical for
 every caller. Everything else is a single indexed query.
 
-| Read | TTL | Dropped when |
-| --- | --- | --- |
-| `/admin/dashboard-stats` | 60 s | never — TTL only |
+| Read                                    | TTL   | Dropped when                           |
+| --------------------------------------- | ----- | -------------------------------------- |
+| `/admin/dashboard-stats`                | 60 s  | never — TTL only                       |
 | `/grocery-duty/cycle-calendar/:cycleId` | 5 min | a duty is assigned, updated or removed |
-| `/meal-plan/cycle-calendar/:cycleId` | 5 min | anyone declares a meal |
+| `/meal-plan/cycle-calendar/:cycleId`    | 5 min | anyone declares a meal                 |
 
 - Permission checks stay outside the cache. `checkMessAccess` runs per request;
   only the shared body is stored.
@@ -165,20 +155,20 @@ Measured on dashboard stats: ~675 ms cold, ~330 ms warm.
 
 All under `/api/v1`. Full reference: [docs/API.md](docs/API.md).
 
-| Base path | What lives there |
-| --- | --- |
-| `/auth` | Register with email OTP, login, Google, refresh, forgot/reset password, `/me` |
-| `/user` | Profile, avatar upload and removal |
-| `/mess` | Create, list, update, soft-delete a mess |
-| `/member` | Add and release members, memberships, mess roster |
-| `/cycle` | Open a month, close it (runs the settlement), reopen it (Admin) |
-| `/meal` | The register: what was actually eaten |
-| `/meal-plan` | The calendar: what a member declares in advance, plus the cutoff |
-| `/expense` | Groceries, utilities and rent, with an optional receipt photo |
-| `/grocery-duty` | Booking a member for a date range, calendar, per-member totals |
-| `/deposit` | Cash handed to the manager before there is a bill |
-| `/payment` | Bills, bKash checkout, and the callback |
-| `/admin` | Users, role changes, block/unblock, audit logs, dashboard stats |
+| Base path       | What lives there                                                              |
+| --------------- | ----------------------------------------------------------------------------- |
+| `/auth`         | Register with email OTP, login, Google, refresh, forgot/reset password, `/me` |
+| `/user`         | Profile, avatar upload and removal                                            |
+| `/mess`         | Create, list, update, soft-delete a mess                                      |
+| `/member`       | Add and release members, memberships, mess roster                             |
+| `/cycle`        | Open a month, close it (runs the settlement), reopen it (Admin)               |
+| `/meal`         | The register: what was actually eaten                                         |
+| `/meal-plan`    | The calendar: what a member declares in advance, plus the cutoff              |
+| `/expense`      | Groceries, utilities and rent, with an optional receipt photo                 |
+| `/grocery-duty` | Booking a member for a date range, calendar, per-member totals                |
+| `/deposit`      | Cash handed to the manager before there is a bill                             |
+| `/payment`      | Bills, bKash checkout, and the callback                                       |
+| `/admin`        | Users, role changes, block/unblock, audit logs, dashboard stats               |
 
 ### Admin guards
 
@@ -251,15 +241,15 @@ Server starts at `http://localhost:5000`.
 
 ### Scripts
 
-| Command | Does |
-| --- | --- |
-| `pnpm dev` | tsx watch, port 5000 |
-| `pnpm build` | `prisma generate` + `tsup` — produces `dist/index.js` for deployment |
-| `pnpm start` | run the server locally |
-| `pnpm typecheck` | `tsc --noEmit` |
-| `pnpm check:settlement` | assert the settlement math balances |
-| `pnpm lint:check` / `lint:fix` | Biome lint |
-| `pnpm format:check` / `format:fix` | Biome format |
+| Command                            | Does                                                                 |
+| ---------------------------------- | -------------------------------------------------------------------- |
+| `pnpm dev`                         | tsx watch, port 5000                                                 |
+| `pnpm build`                       | `prisma generate` + `tsup` — produces `dist/index.js` for deployment |
+| `pnpm start`                       | run the server locally                                               |
+| `pnpm typecheck`                   | `tsc --noEmit`                                                       |
+| `pnpm check:settlement`            | assert the settlement math balances                                  |
+| `pnpm lint:check` / `lint:fix`     | Biome lint                                                           |
+| `pnpm format:check` / `format:fix` | Biome format                                                         |
 
 ---
 
@@ -292,11 +282,11 @@ pnpm build && vercel --prod
 Set every variable from `.env.example` in the Vercel dashboard. Three must differ
 from their local values:
 
-| Variable | Production value |
-| --- | --- |
-| `BACKEND_URL` | `https://messmatebackend.vercel.app` |
-| `BKASH_CALLBACK_URL` | `https://messmatebackend.vercel.app/api/v1` |
-| `FRONTEND_URL` | wherever the browser should land after paying |
+| Variable             | Production value                              |
+| -------------------- | --------------------------------------------- |
+| `BACKEND_URL`        | `https://messmatebackend.vercel.app`          |
+| `BKASH_CALLBACK_URL` | `https://messmatebackend.vercel.app/api/v1`   |
+| `FRONTEND_URL`       | wherever the browser should land after paying |
 
 If `BKASH_CALLBACK_URL` is left on localhost, bKash sends the browser to a
 machine it cannot reach and the payment is taken but never settled. Do not set
@@ -325,23 +315,34 @@ against the production database after any schema change.
 **Success**
 
 ```json
-{ "success": true, "statusCode": 200, "message": "Expenses Retrieved Successfully", "data": [], "meta": { "page": 1, "limit": 10, "total": 57, "totalPages": 6 } }
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Expenses Retrieved Successfully",
+  "data": [],
+  "meta": { "page": 1, "limit": 10, "total": 57, "totalPages": 6 }
+}
 ```
 
 **Error**
 
 ```json
-{ "success": false, "statusCode": 400, "message": "Validation failed", "errors": [{ "field": "email", "message": "Invalid email" }] }
+{
+  "success": false,
+  "statusCode": 400,
+  "message": "Validation failed",
+  "errors": [{ "field": "email", "message": "Invalid email" }]
+}
 ```
 
-| Code | Meaning |
-| --- | --- |
-| 400 | Validation failure |
-| 401 | Missing / invalid token |
-| 403 | Wrong role, blocked user, or another mess's resource |
-| 404 | Row does not exist |
-| 409 | Business conflict — closed cycle, duplicate entry, missed cutoff |
-| 429 | Rate limited |
+| Code | Meaning                                                          |
+| ---- | ---------------------------------------------------------------- |
+| 400  | Validation failure                                               |
+| 401  | Missing / invalid token                                          |
+| 403  | Wrong role, blocked user, or another mess's resource             |
+| 404  | Row does not exist                                               |
+| 409  | Business conflict — closed cycle, duplicate entry, missed cutoff |
+| 429  | Rate limited                                                     |
 
 ---
 
@@ -408,5 +409,5 @@ Live API        : https://messmatebackend.vercel.app
 API Docs        : https://github.com/Maptaul/Messmate-Backend/blob/main/docs/API.md
 Demo Video      : (pending)
 Admin Email     : admin@messmate.app
-Admin Password  : (provided at submission)
+Admin Password  : Admin@messmate12345
 ```
