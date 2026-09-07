@@ -108,6 +108,38 @@
     {
       "key": "targetUserId",
       "value": ""
+    },
+    {
+      "key": "cycleYear",
+      "value": ""
+    },
+    {
+      "key": "cycleMonth",
+      "value": ""
+    },
+    {
+      "key": "mealDate",
+      "value": ""
+    },
+    {
+      "key": "planDate1",
+      "value": ""
+    },
+    {
+      "key": "planDate2",
+      "value": ""
+    },
+    {
+      "key": "dutyStart",
+      "value": ""
+    },
+    {
+      "key": "dutyEnd",
+      "value": ""
+    },
+    {
+      "key": "expenseDate",
+      "value": ""
     }
   ],
   "item": [
@@ -271,9 +303,34 @@
                   "  console.log(\"managerToken saved\");",
                   "}",
                   "",
-                  "// Stamped once per run so Create mess below never collides with the mess a",
-                  "// previous run left behind.",
-                  "pm.collectionVariables.set(\"runId\", String(Date.now()).slice(-6));"
+                  "pm.collectionVariables.set(\"runId\", String(Date.now()).slice(-6));",
+                  "",
+                  "const now = new Date();",
+                  "const year = now.getUTCFullYear();",
+                  "const month = now.getUTCMonth();",
+                  "const today = now.getUTCDate();",
+                  "const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();",
+                  "const iso = (day) =>",
+                  "  `${year}-${String(month + 1).padStart(2, \"0\")}-${String(Math.min(day, lastDay)).padStart(2, \"0\")}`;",
+                  "",
+                  "pm.collectionVariables.set(\"cycleYear\", String(year));",
+                  "pm.collectionVariables.set(\"cycleMonth\", String(month + 1));",
+                  "",
+                  "// Meals and expenses are recorded for today: the demo member joined the mess",
+                  "// moments ago, and nothing may be dated before they joined.",
+                  "pm.collectionVariables.set(\"mealDate\", iso(today));",
+                  "pm.collectionVariables.set(\"expenseDate\", iso(today));",
+                  "pm.collectionVariables.set(\"dutyStart\", iso(today));",
+                  "pm.collectionVariables.set(\"dutyEnd\", iso(today + 2));",
+                  "",
+                  "// Plans are declared ahead of the 11 PM cutoff, so they must be at least two",
+                  "// days out for the deadline to still be in the future.",
+                  "pm.collectionVariables.set(\"planDate1\", iso(today + 2));",
+                  "pm.collectionVariables.set(\"planDate2\", iso(today + 3));",
+                  "",
+                  "// Today's own plan closed at 11 PM last night - that is the 409 demo.",
+                  "pm.collectionVariables.set(\"lateDate\", iso(today));",
+                  "console.log(\"run dates set for\", year + \"-\" + (month + 1));"
                 ]
               }
             }
@@ -976,14 +1033,9 @@
                 "exec": [
                   "const res = pm.response.json();",
                   "if (res?.data?.id) {",
-                  "  pm.collectionVariables.set('cycleId', res?.data?.id);",
-                  "  console.log('cycleId saved:', res?.data?.id);",
-                  "}",
-                  "",
-                  "// The cutoff demo further down has to aim at a date the member has already",
-                  "// joined for. Today is the only one that qualifies: anything earlier trips",
-                  "// the join-date guard first and answers 400 instead of the 409 it means to show.",
-                  "pm.collectionVariables.set('lateDate', new Date().toISOString().slice(0, 10));"
+                  "  pm.collectionVariables.set(\"cycleId\", res?.data?.id);",
+                  "  console.log(\"cycleId saved:\", res?.data?.id);",
+                  "}"
                 ]
               }
             }
@@ -1002,7 +1054,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"messId\": \"{{messId}}\",\n  \"year\": 2026,\n  \"month\": 9\n}"
+              "raw": "{\n  \"messId\": \"{{messId}}\",\n  \"year\": {{cycleYear}},\n  \"month\": {{cycleMonth}}\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/cycle/open-cycle",
@@ -1159,7 +1211,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"cycleId\": \"{{cycleId}}\",\n  \"date\": \"2026-09-05\",\n  \"entries\": [\n    { \"memberId\": \"{{memberId}}\", \"lunch\": 1, \"dinner\": 1 }\n  ]\n}"
+              "raw": "{\n  \"cycleId\": \"{{cycleId}}\",\n  \"date\": \"{{mealDate}}\",\n  \"entries\": [\n    {\n      \"memberId\": \"{{memberId}}\",\n      \"lunch\": 1,\n      \"dinner\": 1\n    }\n  ]\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/meal/add-daily-meals",
@@ -1310,7 +1362,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"cycleId\": \"{{cycleId}}\",\n  \"days\": [\n    { \"date\": \"2026-09-20\", \"lunch\": 1, \"dinner\": 1 },\n    { \"date\": \"2026-09-21\", \"lunch\": 0, \"dinner\": 1 }\n  ]\n}"
+              "raw": "{\n  \"cycleId\": \"{{cycleId}}\",\n  \"days\": [\n    {\n      \"date\": \"{{planDate1}}\",\n      \"lunch\": 1,\n      \"dinner\": 1\n    },\n    {\n      \"date\": \"{{planDate2}}\",\n      \"lunch\": 0,\n      \"dinner\": 1\n    }\n  ]\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/meal-plan/set-my-plan",
@@ -1428,7 +1480,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"cycleId\": \"{{cycleId}}\",\n  \"date\": \"2026-09-20\"\n}"
+              "raw": "{\n  \"cycleId\": \"{{cycleId}}\",\n  \"date\": \"{{planDate1}}\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/meal-plan/apply-to-register",
@@ -1482,7 +1534,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"cycleId\": \"{{cycleId}}\",\n  \"type\": \"GROCERY\",\n  \"amount\": 9000,\n  \"splitMethod\": \"EQUAL\",\n  \"spentAt\": \"2026-09-15\",\n  \"description\": \"Weekly bazar\"\n}"
+              "raw": "{\n  \"cycleId\": \"{{cycleId}}\",\n  \"type\": \"GROCERY\",\n  \"amount\": 4500,\n  \"splitMethod\": \"BY_MEAL\",\n  \"spentAt\": \"{{expenseDate}}\",\n  \"note\": \"Week one bazaar\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/expense/add-expense",
@@ -1534,7 +1586,7 @@
                 },
                 {
                   "key": "spentAt",
-                  "value": "2026-09-15",
+                  "value": "{{expenseDate}}",
                   "type": "text"
                 },
                 {
@@ -1708,7 +1760,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"cycleId\": \"{{cycleId}}\",\n  \"memberId\": \"{{memberId}}\",\n  \"startDate\": \"2026-09-01\",\n  \"endDate\": \"2026-09-04\",\n  \"note\": \"First turn of the month\"\n}"
+              "raw": "{\n  \"cycleId\": \"{{cycleId}}\",\n  \"memberId\": \"{{memberId}}\",\n  \"startDate\": \"{{dutyStart}}\",\n  \"endDate\": \"{{dutyEnd}}\",\n  \"note\": \"First stretch\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/grocery-duty/assign-duty",
