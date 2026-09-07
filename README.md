@@ -407,7 +407,9 @@ Project Name    : MessMate — Smart Mess & Shared Housing Management Platform
 Backend Repo    : https://github.com/Maptaul/Messmate-Backend
 Live API        : https://messmatebackend.vercel.app
 API Docs        : https://github.com/Maptaul/Messmate-Backend/blob/main/docs/API.md
-Demo Video      : (pending)
+Demo Video      : https://www.loom.com/share/f917a2016fb2409989a2e2dec4171c1c
+
+
 Admin Email     : admin@messmate.app
 Admin Password  : Admin@messmate12345
 ```
