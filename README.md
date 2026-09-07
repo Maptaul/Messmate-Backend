@@ -408,8 +408,6 @@ Backend Repo    : https://github.com/Maptaul/Messmate-Backend
 Live API        : https://messmatebackend.vercel.app
 API Docs        : https://github.com/Maptaul/Messmate-Backend/blob/main/docs/API.md
 Demo Video      : https://www.loom.com/share/be92f0b77582452e86a86ddcceb4bcdd
-
-q
 Admin Email     : admin@messmate.app
 Admin Password  : Admin@messmate12345
 ```
