@@ -12,15 +12,12 @@ type TErrorSource = {
 
 export const globalErrorHandler = async (
 	err: any,
-	_req: Request,
+	req: Request,
 	res: Response,
 	_next: NextFunction,
 ) => {
 	const isDevelopment = config.node_env === "development";
-
-	if (isDevelopment) {
-		console.log("Error from Global Error Handler", err);
-	}
+	const requestId = res.locals.requestId as string | undefined;
 
 	let statusCode: number = httpStatus.INTERNAL_SERVER_ERROR;
 	let errorMessage = err.message || "Internal Server Error";
@@ -85,10 +82,27 @@ export const globalErrorHandler = async (
 	} else if (err instanceof Prisma.PrismaClientUnknownRequestError) {
 		statusCode = httpStatus.INTERNAL_SERVER_ERROR;
 		errorMessage = "Error occurred during query execution";
+	} else if (
+		typeof err?.type === "string" &&
+		typeof err?.status === "number" &&
+		err.status >= 400 &&
+		err.status < 500
+	) {
+		statusCode = err.status;
+		isKnownError = true;
+
+		errorMessage =
+			err.type === "entity.too.large"
+				? "Request Body Is Too Large"
+				: "Request Body Could Not Be Read. Please Send Valid JSON.";
 	}
 
 	if (!isKnownError) {
-		console.error("[globalErrorHandler] Unhandled error", err);
+		console.error(
+			"[globalErrorHandler] Unhandled error",
+			{ requestId, method: req.method, path: req.originalUrl },
+			err,
+		);
 	}
 
 	res.status(statusCode).json({
@@ -97,6 +111,7 @@ export const globalErrorHandler = async (
 		message:
 			isKnownError || isDevelopment ? errorMessage : "Internal Server Error",
 		errors,
+		requestId,
 		name: isDevelopment ? errorName : undefined,
 		error: isDevelopment ? err : undefined,
 		stack: isDevelopment ? err.stack : undefined,

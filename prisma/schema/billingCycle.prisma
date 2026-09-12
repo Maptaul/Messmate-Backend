@@ -5,7 +5,7 @@ model BillingCycle {
   month  Int
   status CycleStatus @default(OPEN)
 
-  totalMeals   Int?
+  totalMeals   Float?
   totalGrocery Decimal?  @db.Decimal(12, 2)
   mealRate     Decimal?  @db.Decimal(12, 4)
   closedAt     DateTime?

@@ -4,8 +4,6 @@ A REST API for the monthly accounts of a shared mess. Members record daily
 meals, the manager records groceries and utility bills, and at month end the
 system computes every member's share and lets them settle it through **bKash**.
 
-Built for Programming Hero **B7A6** (Assignment 6) — backend only.
-
 **Live API:** <https://messmatebackend.vercel.app> · **[API Reference](docs/API.md)** · **[Postman collection](postman/MessMate.postman_collection.json)**
 
 Our own 8-person mess in Chattogram keeps this ledger by hand every month: who
@@ -26,7 +24,9 @@ bill, and who owes what at the end. MessMate turns that notebook into an API.
 | Zod                                          | Request validation                                            |
 | Redis                                        | bKash token cache, OTP state, read cache, rate-limit counters |
 | bKash Tokenized Checkout                     | Payment                                                       |
-| Nodemailer + EJS                             | OTP and password-reset emails                                 |
+| Nodemailer + EJS                             | OTP, bill, receipt and reminder emails                        |
+| pdfkit                                       | Bill and receipt PDFs attached to those emails                |
+| node-cron + Vercel Cron                      | Scheduled reminders, one set of jobs either way               |
 | Cloudinary + Multer                          | Avatars and expense receipts                                  |
 | tsup                                         | Bundles the serverless entry                                  |
 | Biome                                        | Lint + format                                                 |
@@ -60,11 +60,13 @@ groceryTotal  = Σ amount  where type = GROCERY
 mealRate      = groceryTotal / totalMeals       e.g. 9000 / 480 = ৳18.75
 
 per member:
+  opening     = what they still owed when last month closed   (0 for a new mess)
   mealCost    = meals × mealRate
   sharedCost  = gas + electricity + water + internet + maid, split EQUAL or BY_MEAL
   rentShare   = monthlyRent × daysPresent / daysInMonth      (prorated)
+  advance     = monthlyDeposit, charged for next month's fund
   credit      = deposits + expenses this member personally paid
-  due         = mealCost + sharedCost + rentShare − credit
+  due         = opening + mealCost + sharedCost + rentShare + advance − credit
 ```
 
 `GROCERY` is excluded from `sharedCost` because it is already inside `mealRate`;
@@ -80,6 +82,64 @@ deterministically.
 
 `pnpm check:settlement` runs 20 assertions over the pure function, no database
 needed.
+
+### Every taka that buys food must be an expense
+
+`mealRate` divides `groceryTotal` — the sum of `GROCERY` expenses — by the meals.
+So any money that bought food has to be recorded as an expense, including money
+that came out of the mess fund rather than someone's pocket. Record those with no
+`paidByMemberId`: the field is optional, and leaving it out means the mess paid,
+not a person.
+
+Our own August 2026 ledger shows why this matters. Members fronted ৳8,985 of
+bazaar from their own pockets, and a further ৳4,800 came from the eight ৳600
+monthly deposits. Over 282.5 meals:
+
+| Recorded                                       | `groceryTotal` | `mealRate` |
+| ---------------------------------------------- | -------------- | ---------- |
+| personal bazaar only                           | ৳8,985         | ৳31.81     |
+| personal bazaar **+ the ৳4,800 from the fund** | ৳13,785        | **৳48.80** |
+
+The paper ledger's own figure is ৳48.79646, so the second row is the correct one.
+Miss the fund purchase and nothing errors — the rate simply comes out about a
+third too low, and every bill is quietly wrong.
+
+A deposit is credit against a member's own bill. It is not, by itself, grocery
+money; the shopping it paid for is.
+
+Because nothing errors, closing a cycle checks for it. If a cycle took deposits
+and no grocery expense was recorded against the fund, the close response carries
+a `warnings` entry saying so. It does not block the close — a mess whose fund
+genuinely bought nothing is entitled to close — it just refuses to let the
+mistake pass in silence.
+
+### The rolling advance
+
+Our mess takes ৳600 from everyone at the start of each month, and that money is
+what buys the next month's bazaar. So the deposit is not only a credit — it is
+also a **charge**, and the two land in different months:
+
+- the ৳600 you handed over **this** month credits **this** month's bill
+- the ৳600 on the bill is the advance for **next** month
+
+Whatever is left unpaid when the month closes is carried into the next month's
+bill as `openingBalance`, positive if you owe and negative if the mess owes you.
+It rolls until it is settled.
+
+`Mess.monthlyDeposit` is what a mess charges. Leave it at `0` and MessMate
+behaves exactly as it did before — no advance line, and nothing carried forward.
+
+### Half meals
+
+Real ledgers record them — ours has a member on `17½` for August — so `lunch` and
+`dinner` accept multiples of `0.5`. A mess has half meals, not thirds, which is
+exactly what the validation says.
+
+The whole of that August is a test. `tests/august-2026-ledger.test.ts` feeds the
+paper month to `computeSettlement` and asserts the rate lands on ৳48.7965 against
+the ledger's own ৳48.79646, that the meal costs sum back to ৳13,785 to the paisa,
+that the month settles to zero, and that the 17.5 survives into that member's
+bill.
 
 ---
 
@@ -169,6 +229,7 @@ All under `/api/v1`. Full reference: [docs/API.md](docs/API.md).
 | `/deposit`      | Cash handed to the manager before there is a bill                             |
 | `/payment`      | Bills, bKash checkout, and the callback                                       |
 | `/admin`        | Users, role changes, block/unblock, audit logs, dashboard stats               |
+| `/cron`         | Vercel Cron endpoints for the two email reminders, behind a shared secret     |
 
 ### Admin guards
 
@@ -180,12 +241,40 @@ All under `/api/v1`. Full reference: [docs/API.md](docs/API.md).
 
 `GET /admin/audit-logs` reads back what every module writes: cycle closed and
 reopened, member removed, expense and deposit deleted, payment settled, role
-changed, user blocked and unblocked — each row with the actor and the
-before/after state, filterable by action, entity or actor.
+changed, user blocked and unblocked, and every meal recorded, changed or deleted
+— each row with the actor and the before/after state, filterable by action,
+entity or actor.
+
+**Why meals are on that list.** The manager fills the register for the whole
+mess, with no cutoff, because what was eaten is the truth and it is written down
+after the fact. But a meal is money — it is `mealRate` on that member's bill, and
+it shifts everyone else's share too. So the register is the manager's to fill,
+and it is not anonymous.
+
+**Who can read it.** `GET /admin/audit-logs` is the platform view and stays
+`ADMIN`-only. `GET /mess/audit-logs/:messId` is the mess view, and the role
+decides the scope: a manager gets their whole mess and a `403` on anybody else's,
+a **member gets only the rows about themselves**.
+
+That last part is the point. The meal audit exists to protect members from silent
+changes, so the member has to be able to see it. Their scope is resolved from
+their own `MessMember` row on the server — asking for `?memberId=` someone else
+changes nothing.
+
+Rows about one person carry a `subjectMemberId`; closing a cycle touches everyone
+and carries none, so it stays out of a member's view. Platform actions like a
+role change carry no `messId` at all and never reach a mess view.
 
 ---
 
 ## Payment (bKash Tokenized Checkout)
+
+```
+**Cash still works.** Most mess money is notes in a hand, so
+`POST /payment/record-cash-payment` lets the manager record what a member handed
+over: same arithmetic, same audit row, same receipt, `paymentGateway: "cash"`.
+Overpaying is refused, and the bill update is conditional on what it read, so two
+managers recording the same cash cannot double-credit it.
 
 ```
 MEMBER -> POST /payment/create-payment { billId }
@@ -218,6 +307,81 @@ the gateway call then fails the row stays `UNPAID`.
 and refresh flow and caches both tokens in Redis (id token 1 h, refresh token
 28 days). Sandbox versus live is `BKASH_BASE_URL`, not a code branch.
 
+After checkout, bKash sends the payer back to the API's own result page at
+`GET /payment/result` — a small responsive page, since a payer is holding a
+phone and there is no frontend yet. Point `PAYMENT_RESULT_URL` at a frontend
+route when one exists and the callback will redirect there instead. Settlement
+happens server-side either way; the page only reports what already happened.
+
+---
+
+## The Monthly Bill
+
+Closing a cycle emails every member their share and attaches it as a PDF. The
+lines follow the mess's own paper sheet — meals, meal cost, **khala**, each
+utility, rent — rather than one lumped "shared bills" figure, and the deposit is
+shown separately from the bazaar a member fronted themselves.
+
+Our own August 2026, Tarak's line:
+
+```
+August 2026 — Tarak
+
+Last month's balance       BDT     0.00
+Your meals                        33
+Meal cost (33 × 48.80)     BDT 1,610.28
+Khala                      BDT   438.00
+Electricity                BDT   400.00
+Rent share                 BDT 1,600.00
+Next month's deposit       BDT   600.00
+Total payable              BDT 4,648.28
+
+Deposit                    BDT   600.00
+Bazaar you paid yourself   BDT   630.00
+Total credit               BDT 1,230.00
+
+You owe                    BDT 3,418.28
+```
+
+The paper sheet says ৳3,425 for the same line. The ৳6.72 gap is the whole
+difference: the mess rounds the meal rate to ৳49 by hand, MessMate keeps
+৳48.7965. Nothing else differs.
+
+The itemisation comes from `sharedBreakdown` on the settlement result, so it is
+computed, not typed. A mess that records nothing but groceries still gets the
+single shared line.
+
+A settled payment — bKash or cash — sends the same document as a receipt.
+
+---
+
+## Scheduled Jobs
+
+Two triggers, one set of jobs, because the app runs in two shapes.
+
+On Vercel, `node-cron` cannot work — a serverless instance sleeps between
+requests and its timers die with it. Two entries in `vercel.json` call
+authenticated endpoints instead:
+
+| Job                          | Runs              | Emails                                                 |
+| ---------------------------- | ----------------- | ------------------------------------------------------ |
+| `/cron/meal-plan-reminder`   | 16:00 UTC daily   | members of an open cycle with no plan set for tomorrow |
+| `/cron/unpaid-bill-reminder` | 04:00 UTC Mondays | members still owing money on a closed cycle            |
+
+16:00 UTC is 22:00 in Dhaka — one hour before the meal-plan cutoff, which is the
+only time a reminder is worth sending. The bill reminder is weekly rather than
+daily on purpose: a daily email about the same unpaid bill is a nag.
+
+Both require `Authorization: Bearer $CRON_SECRET`, which Vercel Cron sends
+automatically, and answer `503` if `CRON_SECRET` is unset — so they are never
+open to the internet. Both accept `?dryRun=true`, which reports exactly who would
+be emailed and sends nothing.
+
+Run it as a long-lived process instead — `pnpm start` on a VPS, or locally for
+the real mess — and `node-cron` schedules the same two jobs in `Asia/Dhaka`
+directly. That scheduler starts from `src/server.ts` only, which the serverless
+entry never imports, so the two triggers can never both fire.
+
 ---
 
 ## Setup
@@ -229,6 +393,8 @@ pnpm install
 # 2. Configure
 cp .env.example .env       # DATABASE_URL, REDIS_*, JWT secrets, GOOGLE_CLIENT_ID,
                            # SMTP_*, CLOUDINARY_*, BKASH_* (sandbox values included)
+                           # CRON_SECRET guards the scheduled jobs; leave it
+                           # empty and they answer 503 instead of running
 
 # 3. Apply the schema
 npx prisma migrate deploy  # or: npx prisma migrate dev
@@ -247,9 +413,22 @@ Server starts at `http://localhost:5000`.
 | `pnpm build`                       | `prisma generate` + `tsup` — produces `dist/index.js` for deployment |
 | `pnpm start`                       | run the server locally                                               |
 | `pnpm typecheck`                   | `tsc --noEmit`                                                       |
+| `pnpm test`                        | 91 checks on Node's own test runner                                  |
 | `pnpm check:settlement`            | assert the settlement math balances                                  |
+| `pnpm check:all`                   | typecheck + lint + settlement + tests, the same set CI runs          |
+| `pnpm test:postman`                | drive the Postman collection through newman (`:local` for localhost) |
 | `pnpm lint:check` / `lint:fix`     | Biome lint                                                           |
 | `pnpm format:check` / `format:fix` | Biome format                                                         |
+
+### Tests
+
+No framework — `node --test` with `node:assert`. `tests/api.test.ts` boots the
+real Express app on an ephemeral port and drives it over HTTP, so the middleware
+chain, the error envelope and the auth guards are exercised as deployed. The rest
+are unit tests over the pure pieces: the settlement engine against a real month
+of paper accounts, the Dhaka/UTC cutoff arithmetic, validation, pagination.
+
+CI runs the lot on every push and pull request.
 
 ---
 
@@ -348,7 +527,7 @@ against the production database after any schema change.
 
 ## Postman
 
-`postman/MessMate.postman_collection.json` — **91 requests across 15 folders**.
+`postman/MessMate.postman_collection.json` — **103 requests across 16 folders**.
 `baseUrl` already points at the live API, so importing and running it needs no
 edits.
 
@@ -367,6 +546,18 @@ hosted page actually paid. Everything else passes against the deployed API:
 === pass 83 | fail 0 | manual 8 | error 0 | total 91 ===
 ```
 
+That run covered the 91 requests as submitted. Twelve more were added since,
+and each was run against a local server: the payment result page, the three
+**Scheduled jobs** requests, cycle bills and cash payments with their rejection
+paths, and the mess audit trail read by a manager and by a member. The member
+requests assert that every row returned is about that member, and that passing
+someone else's `?memberId=` does not widen it. The cron requests all use `?dryRun=true`, so they report
+who would be emailed and send nothing; they need `cronSecret` set to the same
+value as the server's `CRON_SECRET`.
+
+`pnpm test:postman` runs the collection from the command line through newman,
+and `pnpm test:postman:local` points it at `localhost:5000`.
+
 The Admin folder's two state-changing pairs are round trips — role there and
 back, block then unblock — so later requests are not affected. The mess name
 carries a per-run stamp, so the collection is re-runnable. `/auth` allows 30
@@ -380,8 +571,13 @@ back will start answering 429.
 Passwords hashed with bcrypt · Bearer JWT with separate access and refresh
 secrets · role and account status checked against the **database** row, not the
 token payload · `helmet` · CORS allow-list · rate limiting (300/15 min general,
-30/15 min on `/auth`, bKash callback exempt) · every secret read through
-`src/app/config`.
+30/15 min on `/auth`, bKash callback exempt) · scheduled-job endpoints behind a
+shared secret compared in constant time · list `limit` clamped to 100 · every
+secret read through `src/app/config`.
+
+Every response carries an `x-request-id`, repeated in the body of any error and
+written into the log line for that request — so a user reporting a failure can
+quote one value that finds it.
 
 ---
 
@@ -394,9 +590,16 @@ token payload · `helmet` · CORS allow-list · rate limiting (300/15 min genera
 - [x] Settlement + cycle close transaction
 - [x] bKash payment + idempotent callback
 - [x] Admin operations — users, roles, block/unblock, audit logs, dashboard stats
-- [x] Postman collection — 91 requests, verified end to end
+- [x] Postman collection — 103 requests, verified end to end
 - [x] Deployment
-- [ ] Demo video
+- [x] Demo video
+- [x] Half meals, deposit-funded groceries, the August 2026 ledger as a test
+- [x] Test suite + CI, request ids, scheduled reminders
+- [x] Bill and receipt emails with PDF invoices, itemised like the paper sheet
+- [x] Cash payments recorded by the manager, alongside bKash
+- [x] Rolling monthly advance and a balance that carries between months
+
+Known limitations and what comes next: **[docs/ROADMAP.md](docs/ROADMAP.md)**.
 
 ---
 
@@ -409,5 +612,4 @@ Live API        : https://messmatebackend.vercel.app
 API Docs        : https://github.com/Maptaul/Messmate-Backend/blob/main/docs/API.md
 Demo Video      : https://www.loom.com/share/be92f0b77582452e86a86ddcceb4bcdd
 Admin Email     : admin@messmate.app
-Admin Password  : Admin@messmate12345
 ```

@@ -2,7 +2,7 @@ import z from "zod";
 
 const mealCountSchema = z.coerce
 	.number("Meal Count Must Be A Number")
-	.int("Meal Count Must Be A Whole Number")
+	.multipleOf(0.5, "Meal Count Must Be A Whole Or Half Meal")
 	.min(0, "Meal Count Cannot Be Negative")
 	.max(10, "Meal Count Is Too High");
 

@@ -22,6 +22,12 @@ router.get(
 	MessController.getMyMesses,
 );
 
+router.get(
+	"/audit-logs/:messId",
+	auth(Role.ADMIN, Role.MESS_MANAGER, Role.MEMBER),
+	MessController.getMessAuditLogs,
+);
+
 router.patch(
 	"/update-mess/:messId",
 	auth(Role.ADMIN, Role.MESS_MANAGER),

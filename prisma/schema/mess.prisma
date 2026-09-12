@@ -1,9 +1,10 @@
 model Mess {
   id String @id @default(uuid())
 
-  name        String  @db.VarChar(120)
-  address     String  @db.VarChar(300)
-  monthlyRent Decimal @db.Decimal(12, 2)
+  name           String  @db.VarChar(120)
+  address        String  @db.VarChar(300)
+  monthlyRent    Decimal @db.Decimal(12, 2)
+  monthlyDeposit Decimal @default(0) @db.Decimal(12, 2)
 
   isDeleted Boolean   @default(false)
   deletedAt DateTime?
@@ -14,8 +15,9 @@ model Mess {
   managerId String
   manager   User   @relation("MessManager", fields: [managerId], references: [id], onUpdate: Cascade)
 
-  members MessMember[]
-  cycles  BillingCycle[]
+  members   MessMember[]
+  cycles    BillingCycle[]
+  auditLogs AuditLog[]
 
   @@index([managerId])
   @@index([isDeleted])

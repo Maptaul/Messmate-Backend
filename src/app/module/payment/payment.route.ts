@@ -9,6 +9,8 @@ const router = Router();
 
 router.get("/callback", PaymentController.paymentCallback);
 
+router.get("/result", PaymentController.paymentResult);
+
 router.get(
 	"/my-bills",
 	auth(Role.MESS_MANAGER, Role.MEMBER),
@@ -20,6 +22,19 @@ router.post(
 	auth(Role.MESS_MANAGER, Role.MEMBER),
 	validateRequest(PaymentValidation.CreatePaymentValidationZodSchema),
 	PaymentController.createPayment,
+);
+
+router.get(
+	"/cycle-bills/:cycleId",
+	auth(Role.ADMIN, Role.MESS_MANAGER),
+	PaymentController.getCycleBills,
+);
+
+router.post(
+	"/record-cash-payment",
+	auth(Role.ADMIN, Role.MESS_MANAGER),
+	validateRequest(PaymentValidation.RecordCashPaymentValidationZodSchema),
+	PaymentController.recordCashPayment,
 );
 
 router.get(

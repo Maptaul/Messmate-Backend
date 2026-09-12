@@ -2,8 +2,8 @@ model MealPlan {
   id String @id @default(uuid())
 
   date   DateTime @db.Date
-  lunch  Int      @default(0)
-  dinner Int      @default(0)
+  lunch  Float    @default(0)
+  dinner Float    @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

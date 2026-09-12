@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgres://ci:ci@localhost:5432/ci
+
+      # The integration suite boots the real app, so it needs the same
+      # environment the app reads. These are throwaway CI values, never secrets.
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: "6379"
+      JWT_ACCESS_SECRET: ci-access-secret
+      JWT_REFRESH_SECRET: ci-refresh-secret
+      JWT_ACCESS_EXPIRES_IN: 1d
+      JWT_REFRESH_EXPIRES_IN: 30d
+      BCRYPT_SALT_ROUNDS: "10"
+      SUPER_ADMIN_NAME: CI Admin
+      SUPER_ADMIN_EMAIL: ci-admin@messmate.test
+      SUPER_ADMIN_PASSWORD: CiAdmin@12345
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm typecheck
+
+      - run: pnpm lint:check
+
+      - run: pnpm check:settlement
+
+      - run: pnpm exec prisma migrate deploy
+
+      - run: pnpm test

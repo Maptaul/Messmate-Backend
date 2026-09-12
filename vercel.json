@@ -5,7 +5,11 @@
       "src": "dist/index.js",
       "use": "@vercel/node",
       "config": {
-        "includeFiles": ["src/app/templates/**"]
+        "includeFiles": [
+          "src/app/templates/**",
+          "node_modules/.pnpm/pdfkit@*/node_modules/pdfkit/js/**",
+          "node_modules/pdfkit/js/**"
+        ]
       }
     }
   ],
@@ -13,6 +17,16 @@
     {
       "src": "/(.*)",
       "dest": "dist/index.js"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/v1/cron/meal-plan-reminder",
+      "schedule": "0 16 * * *"
+    },
+    {
+      "path": "/api/v1/cron/unpaid-bill-reminder",
+      "schedule": "0 4 * * 1"
     }
   ]
 }

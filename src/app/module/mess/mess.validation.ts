@@ -13,6 +13,11 @@ const CreateMessValidationZodSchema = z.object({
 		.number("Monthly Rent Must Be A Number")
 		.positive("Monthly Rent Must Be Greater Than Zero")
 		.max(1000000, "Monthly Rent Is Too Large"),
+	monthlyDeposit: z.coerce
+		.number("Monthly Deposit Must Be A Number")
+		.min(0, "Monthly Deposit Cannot Be Negative")
+		.max(1000000, "Monthly Deposit Is Too Large")
+		.optional(),
 });
 
 const UpdateMessValidationZodSchema = z.object({
@@ -29,6 +34,11 @@ const UpdateMessValidationZodSchema = z.object({
 	monthlyRent: z.coerce
 		.number()
 		.positive("Monthly Rent Must Be Greater Than Zero")
+		.max(1000000)
+		.optional(),
+	monthlyDeposit: z.coerce
+		.number()
+		.min(0, "Monthly Deposit Cannot Be Negative")
 		.max(1000000)
 		.optional(),
 });

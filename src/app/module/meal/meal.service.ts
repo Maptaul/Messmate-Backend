@@ -1,10 +1,15 @@
 import httpStatus from "http-status";
-import { CycleStatus, Role } from "../../../generated/prisma/enums";
+import {
+	AuditAction,
+	CycleStatus,
+	Role,
+} from "../../../generated/prisma/enums";
 import type { MealEntryWhereInput } from "../../../generated/prisma/models";
 import type { IQuery } from "../../interfaces";
 import { prisma } from "../../lib/prisma";
 import type { RequestUser } from "../../middleware/checkAuth";
 import { AppError } from "../../utils/AppError";
+import { writeAudit } from "../../utils/audit";
 import { checkMessAccess } from "../../utils/checkMessAccess";
 import type {
 	IAddDailyMealsPayload,
@@ -115,6 +120,11 @@ const addDailyMeals = async (
 		}
 	}
 
+	const before = await prisma.mealEntry.findMany({
+		where: { memberId: { in: memberIds }, date },
+		select: { memberId: true, lunch: true, dinner: true, isDeleted: true },
+	});
+
 	return prisma.$transaction(async (tx) => {
 		const saved = [];
 
@@ -141,6 +151,34 @@ const addDailyMeals = async (
 			saved.push(row);
 		}
 
+		const previous = new Map(before.map((row) => [row.memberId, row]));
+
+		for (const entry of payload.entries) {
+			const was = previous.get(entry.memberId);
+
+			await writeAudit(tx, {
+				actorId: user.userId,
+				action: AuditAction.MEAL_RECORDED,
+				messId: cycle.messId,
+				subjectMemberId: entry.memberId,
+				entity: "MealEntry",
+				entityId: cycle.id,
+				before: was
+					? {
+							date: payload.date,
+							lunch: Number(was.lunch),
+							dinner: Number(was.dinner),
+							isDeleted: was.isDeleted,
+						}
+					: { date: payload.date, lunch: null, dinner: null },
+				after: {
+					date: payload.date,
+					lunch: entry.lunch,
+					dinner: entry.dinner,
+				},
+			});
+		}
+
 		return saved;
 	});
 };
@@ -161,8 +199,9 @@ const getCycleMeals = async (
 
 	await checkMessAccess(cycle.messId, user);
 
-	const limit = query.limit ? Number(query.limit) : 10;
-	const page = query.page ? Number(query.page) : 1;
+	const rawLimit = Math.floor(Number(query.limit)) || 10;
+	const limit = Math.min(Math.max(rawLimit, 1), 100);
+	const page = Math.max(Math.floor(Number(query.page)) || 1, 1);
 	const skip = (page - 1) * limit;
 	const sortBy = query.sortBy ? query.sortBy : "date";
 	const sortOrder = query.sortOrder ? query.sortOrder : "desc";
@@ -296,6 +335,10 @@ const updateMeal = async (
 		select: {
 			id: true,
 			cycleId: true,
+			memberId: true,
+			date: true,
+			lunch: true,
+			dinner: true,
 			cycle: { select: { status: true, messId: true } },
 		},
 	});
@@ -320,10 +363,35 @@ const updateMeal = async (
 		);
 	}
 
-	return prisma.mealEntry.update({
-		where: { id: mealId },
-		data: { lunch: payload.lunch, dinner: payload.dinner },
-		select: mealSelect,
+	return prisma.$transaction(async (tx) => {
+		const updated = await tx.mealEntry.update({
+			where: { id: mealId },
+			data: { lunch: payload.lunch, dinner: payload.dinner },
+			select: mealSelect,
+		});
+
+		await writeAudit(tx, {
+			actorId: user.userId,
+			action: AuditAction.MEAL_UPDATED,
+			messId: meal.cycle.messId,
+			subjectMemberId: meal.memberId,
+			entity: "MealEntry",
+			entityId: mealId,
+			before: {
+				memberId: meal.memberId,
+				date: meal.date,
+				lunch: Number(meal.lunch),
+				dinner: Number(meal.dinner),
+			},
+			after: {
+				memberId: meal.memberId,
+				date: meal.date,
+				lunch: Number(updated.lunch),
+				dinner: Number(updated.dinner),
+			},
+		});
+
+		return updated;
 	});
 };
 
@@ -332,6 +400,10 @@ const deleteMeal = async (mealId: string, user: RequestUser) => {
 		where: { id: mealId, isDeleted: false },
 		select: {
 			id: true,
+			memberId: true,
+			date: true,
+			lunch: true,
+			dinner: true,
 			cycle: { select: { status: true, messId: true } },
 		},
 	});
@@ -356,10 +428,30 @@ const deleteMeal = async (mealId: string, user: RequestUser) => {
 		);
 	}
 
-	return prisma.mealEntry.update({
-		where: { id: mealId },
-		data: { isDeleted: true, deletedAt: new Date() },
-		select: { id: true, date: true, isDeleted: true, deletedAt: true },
+	return prisma.$transaction(async (tx) => {
+		const removed = await tx.mealEntry.update({
+			where: { id: mealId },
+			data: { isDeleted: true, deletedAt: new Date() },
+			select: { id: true, date: true, isDeleted: true, deletedAt: true },
+		});
+
+		await writeAudit(tx, {
+			actorId: user.userId,
+			action: AuditAction.MEAL_DELETED,
+			messId: meal.cycle.messId,
+			subjectMemberId: meal.memberId,
+			entity: "MealEntry",
+			entityId: mealId,
+			before: {
+				memberId: meal.memberId,
+				date: meal.date,
+				lunch: Number(meal.lunch),
+				dinner: Number(meal.dinner),
+			},
+			after: { isDeleted: true },
+		});
+
+		return removed;
 	});
 };
 

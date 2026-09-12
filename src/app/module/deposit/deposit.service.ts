@@ -102,8 +102,9 @@ const getCycleDeposits = async (
 
 	await checkMessAccess(cycle.messId, user);
 
-	const limit = query.limit ? Number(query.limit) : 10;
-	const page = query.page ? Number(query.page) : 1;
+	const rawLimit = Math.floor(Number(query.limit)) || 10;
+	const limit = Math.min(Math.max(rawLimit, 1), 100);
+	const page = Math.max(Math.floor(Number(query.page)) || 1, 1);
 	const skip = (page - 1) * limit;
 	const sortOrder = query.sortOrder === "asc" ? "asc" : "desc";
 
@@ -148,7 +149,7 @@ const updateDeposit = async (
 		throw new AppError(httpStatus.NOT_FOUND, "Deposit Not Found");
 	}
 
-	await loadWritableCycle(deposit.cycleId, user);
+	const cycle = await loadWritableCycle(deposit.cycleId, user);
 
 	return prisma.deposit.update({
 		where: { id: depositId },
@@ -167,7 +168,7 @@ const deleteDeposit = async (depositId: string, user: RequestUser) => {
 		throw new AppError(httpStatus.NOT_FOUND, "Deposit Not Found");
 	}
 
-	await loadWritableCycle(deposit.cycleId, user);
+	const cycle = await loadWritableCycle(deposit.cycleId, user);
 
 	return prisma.$transaction(async (tx) => {
 		const removed = await tx.deposit.update({
@@ -179,6 +180,8 @@ const deleteDeposit = async (depositId: string, user: RequestUser) => {
 		await writeAudit(tx, {
 			actorId: user.userId,
 			action: AuditAction.DEPOSIT_DELETED,
+			messId: cycle.messId,
+			subjectMemberId: deposit.memberId,
 			entity: "Deposit",
 			entityId: depositId,
 			before: { amount: Number(deposit.amount), memberId: deposit.memberId },

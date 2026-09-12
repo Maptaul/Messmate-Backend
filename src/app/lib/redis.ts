@@ -27,3 +27,17 @@ export const ensureRedis = async () => {
 
 	return redisClient;
 };
+
+export const redis = {
+	get: async (...args: Parameters<typeof redisClient.get>) =>
+		(await ensureRedis()).get(...args),
+
+	set: async (...args: Parameters<typeof redisClient.set>) =>
+		(await ensureRedis()).set(...args),
+
+	del: async (...args: Parameters<typeof redisClient.del>) =>
+		(await ensureRedis()).del(...args),
+
+	ttl: async (...args: Parameters<typeof redisClient.ttl>) =>
+		(await ensureRedis()).ttl(...args),
+};

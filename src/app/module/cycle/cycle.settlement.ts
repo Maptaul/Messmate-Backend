@@ -10,6 +10,8 @@ export type SettlementMember = {
 	paidExpenseTotal: number;
 
 	daysPresent: number;
+
+	openingBalance: number;
 };
 
 export type SettlementExpense = {
@@ -23,18 +25,39 @@ export type SettlementInput = {
 	expenses: SettlementExpense[];
 	monthlyRent: number;
 	daysInMonth: number;
+
+	monthlyDeposit: number;
+};
+
+export type SettlementShare = {
+	type: ExpenseType;
+	amount: number;
 };
 
 export type SettlementBill = {
 	memberId: string;
+	openingBalance: number;
 	mealCount: number;
 	mealCost: number;
 	sharedCost: number;
+	sharedBreakdown: SettlementShare[];
 	rentShare: number;
+	advanceCharged: number;
 	totalPayable: number;
+	depositTotal: number;
+	paidExpenseTotal: number;
 	creditAmount: number;
 	dueAmount: number;
 };
+
+const SHARED_TYPE_ORDER: ExpenseType[] = [
+	"MAID",
+	"GAS",
+	"ELECTRICITY",
+	"WATER",
+	"INTERNET",
+	"OTHER",
+];
 
 export type SettlementResult = {
 	totalMeals: number;
@@ -71,7 +94,7 @@ const allocate = (totalPaisa: number, weights: number[]): number[] => {
 };
 
 export const computeSettlement = (input: SettlementInput): SettlementResult => {
-	const { members, expenses, monthlyRent, daysInMonth } = input;
+	const { members, expenses, monthlyRent, daysInMonth, monthlyDeposit } = input;
 
 	const totalMeals = members.reduce((sum, m) => sum + m.mealCount, 0);
 
@@ -92,6 +115,7 @@ export const computeSettlement = (input: SettlementInput): SettlementResult => {
 	);
 
 	const sharedShares = members.map(() => 0);
+	const sharedByType = members.map(() => new Map<ExpenseType, number>());
 
 	for (const expense of sharedExpenses) {
 		const weights =
@@ -104,6 +128,9 @@ export const computeSettlement = (input: SettlementInput): SettlementResult => {
 		const parts = allocate(toPaisa(expense.amount), usable);
 		parts.forEach((part, index) => {
 			sharedShares[index]! += part;
+
+			const bucket = sharedByType[index]!;
+			bucket.set(expense.type, (bucket.get(expense.type) ?? 0) + part);
 		});
 	}
 
@@ -119,17 +146,35 @@ export const computeSettlement = (input: SettlementInput): SettlementResult => {
 		const mealCost = mealShares[index]!;
 		const sharedCost = sharedShares[index]!;
 		const rentShare = rentShares[index]!;
-		const totalPayable = mealCost + sharedCost + rentShare;
+		const openingBalance = toPaisa(member.openingBalance);
+		const advanceCharged = toPaisa(monthlyDeposit);
+
+		const totalPayable =
+			openingBalance + mealCost + sharedCost + rentShare + advanceCharged;
+
 		const creditAmount =
 			toPaisa(member.depositTotal) + toPaisa(member.paidExpenseTotal);
 
+		const sharedBreakdown = [...sharedByType[index]!.entries()]
+			.filter(([, paisa]) => paisa !== 0)
+			.sort(
+				(a, b) =>
+					SHARED_TYPE_ORDER.indexOf(a[0]) - SHARED_TYPE_ORDER.indexOf(b[0]),
+			)
+			.map(([type, paisa]) => ({ type, amount: toTaka(paisa) }));
+
 		return {
 			memberId: member.memberId,
+			openingBalance: toTaka(openingBalance),
 			mealCount: member.mealCount,
 			mealCost: toTaka(mealCost),
 			sharedCost: toTaka(sharedCost),
+			sharedBreakdown,
 			rentShare: toTaka(rentShare),
+			advanceCharged: toTaka(advanceCharged),
 			totalPayable: toTaka(totalPayable),
+			depositTotal: member.depositTotal,
+			paidExpenseTotal: member.paidExpenseTotal,
 			creditAmount: toTaka(creditAmount),
 
 			dueAmount: toTaka(totalPayable - creditAmount),
@@ -142,4 +187,27 @@ export const computeSettlement = (input: SettlementInput): SettlementResult => {
 		mealRate,
 		bills,
 	};
+};
+
+export type FundGroceryCheckInput = {
+	depositTotal: number;
+	expenses: { type: ExpenseType; paidByMemberId: string | null }[];
+};
+
+export const depositFundedGroceryWarning = (
+	input: FundGroceryCheckInput,
+): string | null => {
+	if (input.depositTotal <= 0) {
+		return null;
+	}
+
+	const fundBoughtGroceries = input.expenses.some(
+		(expense) => expense.type === "GROCERY" && !expense.paidByMemberId,
+	);
+
+	if (fundBoughtGroceries) {
+		return null;
+	}
+
+	return "Members Deposited Money This Cycle But No Grocery Expense Was Recorded Against The Mess Fund. If The Fund Bought Groceries, Add Them As A Grocery Expense With No Payer, Otherwise The Meal Rate Will Come Out Too Low.";
 };

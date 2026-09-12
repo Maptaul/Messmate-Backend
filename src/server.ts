@@ -3,6 +3,7 @@ import config from "./app/config";
 import { transporter } from "./app/lib/nodemailer";
 import { prisma } from "./app/lib/prisma";
 import { ensureRedis } from "./app/lib/redis";
+import { startMessMateCrons } from "./app/lib/cron";
 import {
 	seedDemoManager,
 	seedDemoMember,
@@ -24,6 +25,8 @@ const main = async () => {
 		await seedSuperAdmin();
 		await seedDemoManager();
 		await seedDemoMember();
+
+		startMessMateCrons();
 
 		app.listen(PORT, () => {
 			console.log(`Server is running on port ${PORT}`);

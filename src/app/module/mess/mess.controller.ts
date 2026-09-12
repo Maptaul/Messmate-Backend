@@ -58,6 +58,25 @@ const getSingleMess = catchAsync(async (req: Request, res: Response) => {
 	});
 });
 
+const getMessAuditLogs = catchAsync(async (req: Request, res: Response) => {
+	const messId = req.params.messId as string;
+	const user = req.user!;
+
+	const { data, meta } = await MessServices.getMessAuditLogs(
+		messId,
+		req.query,
+		user,
+	);
+
+	sendResponse(res, {
+		statusCode: httpStatus.OK,
+		success: true,
+		message: "Mess Audit Trail Retrieved Successfully",
+		data,
+		meta,
+	});
+});
+
 const updateMess = catchAsync(async (req: Request, res: Response) => {
 	const messId = req.params.messId as string;
 	const payload = req.body;
@@ -92,6 +111,7 @@ export const MessController = {
 	getAllMesses,
 	getMyMesses,
 	getSingleMess,
+	getMessAuditLogs,
 	updateMess,
 	deleteMess,
 };

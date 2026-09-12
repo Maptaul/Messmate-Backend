@@ -13,7 +13,15 @@ model AuditLog {
   actorId String
   actor   User   @relation("AuditActor", fields: [actorId], references: [id], onUpdate: Cascade)
 
+  messId String?
+  mess   Mess?   @relation(fields: [messId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  subjectMemberId String?
+  subjectMember   MessMember? @relation(fields: [subjectMemberId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
   @@index([entity, entityId])
   @@index([actorId, createdAt])
+  @@index([messId, createdAt])
+  @@index([subjectMemberId, createdAt])
   @@map("audit_logs")
 }

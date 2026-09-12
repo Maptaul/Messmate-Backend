@@ -26,12 +26,14 @@ const mealCounts: Record<string, number> = {
 
 const july: SettlementInput = {
 	monthlyRent: 24000,
+	monthlyDeposit: 0,
 	daysInMonth: 30,
 	members: Object.entries(mealCounts).map(([memberId, mealCount]) => ({
 		memberId,
 		mealCount,
 		depositTotal: 0,
 		paidExpenseTotal: 0,
+		openingBalance: 0,
 		daysPresent: 30,
 	})),
 	expenses: [
@@ -133,12 +135,14 @@ console.log("\nRounding - amounts that do not divide cleanly\n");
 check("100 taka across 3 members still sums to 100", () => {
 	const r = computeSettlement({
 		monthlyRent: 0,
+		monthlyDeposit: 0,
 		daysInMonth: 30,
 		members: ["a", "b", "c"].map((memberId) => ({
 			memberId,
 			mealCount: 1,
 			depositTotal: 0,
 			paidExpenseTotal: 0,
+			openingBalance: 0,
 			daysPresent: 30,
 		})),
 		expenses: [{ type: "GAS", amount: 100, splitMethod: "EQUAL" }],
@@ -151,12 +155,14 @@ check("100 taka across 3 members still sums to 100", () => {
 check("1000 grocery across 7 uneven meal counts still sums to 1000", () => {
 	const r = computeSettlement({
 		monthlyRent: 0,
+		monthlyDeposit: 0,
 		daysInMonth: 30,
 		members: [3, 11, 17, 23, 29, 31, 41].map((mealCount, i) => ({
 			memberId: `m${i}`,
 			mealCount,
 			depositTotal: 0,
 			paidExpenseTotal: 0,
+			openingBalance: 0,
 			daysPresent: 30,
 		})),
 		expenses: [{ type: "GROCERY", amount: 1000, splitMethod: "EQUAL" }],
@@ -169,12 +175,14 @@ check("1000 grocery across 7 uneven meal counts still sums to 1000", () => {
 check("0.01 taka across 4 members gives it to exactly one of them", () => {
 	const r = computeSettlement({
 		monthlyRent: 0,
+		monthlyDeposit: 0,
 		daysInMonth: 30,
 		members: ["a", "b", "c", "d"].map((memberId) => ({
 			memberId,
 			mealCount: 1,
 			depositTotal: 0,
 			paidExpenseTotal: 0,
+			openingBalance: 0,
 			daysPresent: 30,
 		})),
 		expenses: [{ type: "WATER", amount: 0.01, splitMethod: "EQUAL" }],
@@ -209,12 +217,14 @@ check("a month with no meals has a rate of 0 and no meal cost", () => {
 check("a BY_MEAL expense in a month with no meals falls back to an equal split", () => {
 	const r = computeSettlement({
 		monthlyRent: 0,
+		monthlyDeposit: 0,
 		daysInMonth: 30,
 		members: ["a", "b"].map((memberId) => ({
 			memberId,
 			mealCount: 0,
 			depositTotal: 0,
 			paidExpenseTotal: 0,
+			openingBalance: 0,
 			daysPresent: 30,
 		})),
 		expenses: [{ type: "INTERNET", amount: 500, splitMethod: "BY_MEAL" }],
@@ -227,10 +237,11 @@ check("a BY_MEAL expense in a month with no meals falls back to an equal split",
 check("rent is shared by days present, and still sums to the full rent", () => {
 	const r = computeSettlement({
 		monthlyRent: 3000,
+		monthlyDeposit: 0,
 		daysInMonth: 30,
 		members: [
-			{ memberId: "full", mealCount: 10, depositTotal: 0, paidExpenseTotal: 0, daysPresent: 30 },
-			{ memberId: "half", mealCount: 10, depositTotal: 0, paidExpenseTotal: 0, daysPresent: 15 },
+			{ memberId: "full", mealCount: 10, depositTotal: 0, paidExpenseTotal: 0, openingBalance: 0, daysPresent: 30 },
+			{ memberId: "half", mealCount: 10, depositTotal: 0, paidExpenseTotal: 0, openingBalance: 0, daysPresent: 15 },
 		],
 		expenses: [],
 	});
@@ -247,12 +258,14 @@ check("rent is shared by days present, and still sums to the full rent", () => {
 check("rent is still collected in full when nobody has days present", () => {
 	const r = computeSettlement({
 		monthlyRent: 3000,
+		monthlyDeposit: 0,
 		daysInMonth: 30,
 		members: ["a", "b"].map((memberId) => ({
 			memberId,
 			mealCount: 0,
 			depositTotal: 0,
 			paidExpenseTotal: 0,
+			openingBalance: 0,
 			daysPresent: 0,
 		})),
 		expenses: [],
@@ -265,6 +278,7 @@ check("rent is still collected in full when nobody has days present", () => {
 check("a cycle with no members produces no bills", () => {
 	const r = computeSettlement({
 		monthlyRent: 24000,
+		monthlyDeposit: 0,
 		daysInMonth: 30,
 		members: [],
 		expenses: [{ type: "GROCERY", amount: 9000, splitMethod: "EQUAL" }],

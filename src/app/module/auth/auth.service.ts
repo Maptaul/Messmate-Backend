@@ -1,10 +1,8 @@
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
-import ejs from "ejs";
 import type { TokenPayload } from "google-auth-library";
 import httpStatus from "http-status";
 import type { JwtPayload, SignOptions } from "jsonwebtoken";
-import path from "path";
 import {
 	AuthProvider,
 	Role,
@@ -12,9 +10,9 @@ import {
 } from "../../../generated/prisma/enums";
 import config from "../../config";
 import { googleClient } from "../../lib/googleAuth";
-import { transporter } from "../../lib/nodemailer";
+import { sendTemplateMail } from "../../lib/mail";
 import { prisma } from "../../lib/prisma";
-import { redisClient } from "../../lib/redis";
+import { redis } from "../../lib/redis";
 import { AppError } from "../../utils/AppError";
 import { jwtUtils } from "../../utils/jwt";
 import type {
@@ -58,27 +56,6 @@ const createAuthTokens = (user: {
 	return { accessToken, refreshToken };
 };
 
-const sendTemplateMail = async (
-	to: string,
-	subject: string,
-	template: string,
-	data: Record<string, unknown>,
-) => {
-	const templatePath = path.join(
-		process.cwd(),
-		`src/app/templates/${template}.ejs`,
-	);
-
-	const html = await ejs.renderFile(templatePath, data);
-
-	await transporter.sendMail({
-		from: config.email_sender,
-		to,
-		subject,
-		html,
-	});
-};
-
 const generateOtp = () => crypto.randomInt(100000, 1000000).toString();
 
 const registerUser = async (payload: IRegisterUserPayload) => {
@@ -105,7 +82,7 @@ const registerUser = async (payload: IRegisterUserPayload) => {
 	const otpKey = `user-registration-otp:${email}`;
 	const otpValue = generateOtp();
 
-	await redisClient.set(otpKey, otpValue, {
+	await redis.set(otpKey, otpValue, {
 		expiration: {
 			type: "EX",
 			value: OTP_EXPIRATION_SECONDS,
@@ -114,7 +91,7 @@ const registerUser = async (payload: IRegisterUserPayload) => {
 
 	const registrationKey = `user-registration-data:${email}`;
 
-	await redisClient.set(
+	await redis.set(
 		registrationKey,
 		JSON.stringify({
 			name,
@@ -157,7 +134,7 @@ const verifyUserEmail = async (payload: IVerifyEmailPayload) => {
 
 	const otpKey = `user-registration-otp:${email}`;
 
-	const redisOtp = await redisClient.get(otpKey);
+	const redisOtp = await redis.get(otpKey);
 
 	if (!redisOtp) {
 		throw new AppError(
@@ -172,7 +149,7 @@ const verifyUserEmail = async (payload: IVerifyEmailPayload) => {
 
 	const registrationKey = `user-registration-data:${email}`;
 
-	const redisUserData = await redisClient.get(registrationKey);
+	const redisUserData = await redis.get(registrationKey);
 
 	if (!redisUserData) {
 		throw new AppError(
@@ -203,7 +180,7 @@ const verifyUserEmail = async (payload: IVerifyEmailPayload) => {
 		omit: { password: true },
 	});
 
-	await redisClient.del([otpKey, registrationKey]);
+	await redis.del([otpKey, registrationKey]);
 
 	await sendTemplateMail(email, "Welcome To MessMate", "member-welcome-email", {
 		userName: createdUser.name,
@@ -454,7 +431,7 @@ const forgotPassword = async (payload: IForgotPasswordPayload) => {
 
 	const otpKey = `forgot-password-otp:${email}`;
 
-	await redisClient.set(otpKey, otp, {
+	await redis.set(otpKey, otp, {
 		expiration: {
 			type: "EX",
 			value: OTP_EXPIRATION_SECONDS,
@@ -504,7 +481,7 @@ const resetPassword = async (payload: IResetPasswordPayload) => {
 
 	const otpKey = `forgot-password-otp:${email}`;
 
-	const redisOtp = await redisClient.get(otpKey);
+	const redisOtp = await redis.get(otpKey);
 
 	if (!redisOtp) {
 		throw new AppError(
@@ -527,7 +504,7 @@ const resetPassword = async (payload: IResetPasswordPayload) => {
 		data: { password: hashedNewPassword },
 	});
 
-	await redisClient.del([otpKey]);
+	await redis.del([otpKey]);
 
 	await sendTemplateMail(
 		email,

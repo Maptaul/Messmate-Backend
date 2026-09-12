@@ -18,9 +18,11 @@ import type { RequestUser } from "../../middleware/checkAuth";
 import { AppError } from "../../utils/AppError";
 import { writeAudit } from "../../utils/audit";
 import { checkMessAccess } from "../../utils/checkMessAccess";
+import { sendPaymentReceipt } from "./payment.mail";
 import type {
 	IBkashExecuteResult,
 	ICreatePaymentPayload,
+	IRecordCashPaymentPayload,
 } from "./payment.interface";
 
 const billSelect = {
@@ -83,8 +85,9 @@ const getMyBills = async (query: IQuery, user: RequestUser) => {
 
 	const memberIds = await findMyMemberIds(user);
 
-	const limit = query.limit ? Number(query.limit) : 10;
-	const page = query.page ? Number(query.page) : 1;
+	const rawLimit = Math.floor(Number(query.limit)) || 10;
+	const limit = Math.min(Math.max(rawLimit, 1), 100);
+	const page = Math.max(Math.floor(Number(query.page)) || 1, 1);
 	const skip = (page - 1) * limit;
 	const sortOrder = query.sortOrder === "asc" ? "asc" : "desc";
 
@@ -233,6 +236,8 @@ const settlePayment = async (
 	paymentId: string,
 	billId: string,
 	actorId: string,
+	messId: string,
+	memberId: string,
 	amount: number,
 	executeResult: IBkashExecuteResult,
 ) => {
@@ -249,7 +254,7 @@ const settlePayment = async (
 		});
 
 		if (claimed.count === 0) {
-			return;
+			return false;
 		}
 
 		const bill = await tx.memberBill.findUnique({
@@ -263,7 +268,7 @@ const settlePayment = async (
 		});
 
 		if (!bill) {
-			return;
+			return false;
 		}
 
 		const paidAmount = Number(bill.paidAmount) + amount;
@@ -282,6 +287,8 @@ const settlePayment = async (
 		await writeAudit(tx, {
 			actorId,
 			action: AuditAction.PAYMENT_SETTLED,
+			messId,
+			subjectMemberId: memberId,
 			entity: "Payment",
 			entityId: paymentId,
 			before: { status: PaymentStatus.UNPAID },
@@ -293,12 +300,16 @@ const settlePayment = async (
 				billDueAmount: dueAmount,
 			},
 		});
+
+		return true;
 	});
 };
 
 const paymentCallback = async (query: Record<string, unknown>) => {
 	const redirectTo = (status: string) =>
-		`${config.frontend_url}/dashboard/my-bills?status=${status}`;
+		config.payment_result_url
+			? `${config.payment_result_url}?status=${status}`
+			: `${config.backend_url}/api/v1/payment/result?status=${status}`;
 
 	const paymentID = typeof query.paymentID === "string" ? query.paymentID : "";
 	const status = typeof query.status === "string" ? query.status : "";
@@ -314,7 +325,8 @@ const paymentCallback = async (query: Record<string, unknown>) => {
 			billId: true,
 			amount: true,
 			status: true,
-			member: { select: { userId: true } },
+			memberId: true,
+			member: { select: { userId: true, messId: true } },
 		},
 	});
 
@@ -380,13 +392,19 @@ const paymentCallback = async (query: Record<string, unknown>) => {
 		return { redirectUrl: redirectTo("failure") };
 	}
 
-	await settlePayment(
+	const settled = await settlePayment(
 		payment.id,
 		payment.billId,
 		payment.member.userId,
+		payment.member.messId,
+		payment.memberId,
 		amount,
 		executeResult,
 	);
+
+	if (settled) {
+		await sendPaymentReceipt(payment.id);
+	}
 
 	return { redirectUrl: redirectTo("success") };
 };
@@ -401,8 +419,9 @@ const getMyPayments = async (query: IQuery, user: RequestUser) => {
 
 	const memberIds = await findMyMemberIds(user);
 
-	const limit = query.limit ? Number(query.limit) : 10;
-	const page = query.page ? Number(query.page) : 1;
+	const rawLimit = Math.floor(Number(query.limit)) || 10;
+	const limit = Math.min(Math.max(rawLimit, 1), 100);
+	const page = Math.max(Math.floor(Number(query.page)) || 1, 1);
 	const skip = (page - 1) * limit;
 	const sortOrder = query.sortOrder === "asc" ? "asc" : "desc";
 
@@ -460,9 +479,220 @@ const getSinglePayment = async (paymentId: string, user: RequestUser) => {
 	return payment;
 };
 
+const getCycleBills = async (
+	cycleId: string,
+	query: IQuery,
+	user: RequestUser,
+) => {
+	const cycle = await prisma.billingCycle.findUnique({
+		where: { id: cycleId },
+		select: { id: true, year: true, month: true, status: true, messId: true },
+	});
+
+	if (!cycle) {
+		throw new AppError(httpStatus.NOT_FOUND, "Billing Cycle Not Found");
+	}
+
+	await checkMessAccess(cycle.messId, user);
+
+	if (user.role === Role.MEMBER) {
+		throw new AppError(
+			httpStatus.FORBIDDEN,
+			"Only The Mess Manager Can See Everybody's Bills",
+		);
+	}
+
+	const rawLimit = Math.floor(Number(query.limit)) || 10;
+	const limit = Math.min(Math.max(rawLimit, 1), 100);
+	const page = Math.max(Math.floor(Number(query.page)) || 1, 1);
+	const skip = (page - 1) * limit;
+
+	const andConditions: MemberBillWhereInput[] = [{ cycleId }];
+
+	if (query.status) {
+		andConditions.push({ status: query.status as BillStatus });
+	}
+
+	if (query.searchTerm) {
+		andConditions.push({
+			member: {
+				user: {
+					OR: [
+						{ name: { contains: query.searchTerm, mode: "insensitive" } },
+						{ email: { contains: query.searchTerm, mode: "insensitive" } },
+					],
+				},
+			},
+		});
+	}
+
+	const where: MemberBillWhereInput = { AND: andConditions };
+
+	const [bills, total] = await Promise.all([
+		prisma.memberBill.findMany({
+			where,
+			skip,
+			take: limit,
+			orderBy: { dueAmount: "desc" },
+			select: {
+				id: true,
+				mealCount: true,
+				mealCost: true,
+				sharedCost: true,
+				rentShare: true,
+				totalPayable: true,
+				creditAmount: true,
+				paidAmount: true,
+				dueAmount: true,
+				status: true,
+				member: {
+					select: {
+						id: true,
+						user: { select: { name: true, email: true } },
+					},
+				},
+			},
+		}),
+		prisma.memberBill.count({ where }),
+	]);
+
+	return {
+		data: bills,
+		meta: {
+			page,
+			limit,
+			total,
+			totalPages: Math.ceil(total / limit),
+		},
+	};
+};
+
+const recordCashPayment = async (
+	payload: IRecordCashPaymentPayload,
+	user: RequestUser,
+) => {
+	const bill = await prisma.memberBill.findUnique({
+		where: { id: payload.billId },
+		select: {
+			id: true,
+			memberId: true,
+			totalPayable: true,
+			creditAmount: true,
+			paidAmount: true,
+			dueAmount: true,
+			status: true,
+			member: { select: { messId: true } },
+		},
+	});
+
+	if (!bill) {
+		throw new AppError(httpStatus.NOT_FOUND, "Bill Not Found");
+	}
+
+	await checkMessAccess(bill.member.messId, user);
+
+	if (user.role === Role.MEMBER) {
+		throw new AppError(
+			httpStatus.FORBIDDEN,
+			"Only The Mess Manager Can Record A Cash Payment",
+		);
+	}
+
+	if (bill.status === BillStatus.PAID) {
+		throw new AppError(httpStatus.CONFLICT, "This Bill Is Already Paid");
+	}
+
+	const outstanding = Number(bill.dueAmount);
+
+	if (outstanding <= 0) {
+		throw new AppError(
+			httpStatus.CONFLICT,
+			"This Bill Has Nothing Left To Pay",
+		);
+	}
+
+	const amount = Number(payload.amount.toFixed(2));
+
+	if (amount > outstanding) {
+		throw new AppError(
+			httpStatus.BAD_REQUEST,
+			`This Bill Only Has ${outstanding.toFixed(2)} Left To Pay`,
+		);
+	}
+
+	const paymentId = randomUUID();
+
+	const settled = await prisma.$transaction(async (tx) => {
+		const claimed = await tx.memberBill.updateMany({
+			where: { id: bill.id, paidAmount: bill.paidAmount },
+			data: {
+				paidAmount: Number(bill.paidAmount) + amount,
+				dueAmount: outstanding - amount,
+				status:
+					outstanding - amount <= 0 ? BillStatus.PAID : BillStatus.PARTIAL,
+			},
+		});
+
+		if (claimed.count === 0) {
+			throw new AppError(
+				httpStatus.CONFLICT,
+				"This Bill Changed While The Payment Was Being Recorded. Please Try Again.",
+			);
+		}
+
+		const payment = await tx.payment.create({
+			data: {
+				id: paymentId,
+				merchantInvoiceNumber: paymentId,
+				billId: bill.id,
+				memberId: bill.memberId,
+				amount,
+				status: PaymentStatus.PAID,
+				paymentGateway: "cash",
+				payerReference: user.email,
+				paidAt: new Date(),
+				gatewayResponse: payload.note ? { note: payload.note } : undefined,
+			},
+			select: {
+				id: true,
+				amount: true,
+				status: true,
+				paymentGateway: true,
+				paidAt: true,
+			},
+		});
+
+		await writeAudit(tx, {
+			actorId: user.userId,
+			action: AuditAction.PAYMENT_SETTLED,
+			messId: bill.member.messId,
+			subjectMemberId: bill.memberId,
+			entity: "Payment",
+			entityId: paymentId,
+			before: { status: PaymentStatus.UNPAID },
+			after: {
+				status: PaymentStatus.PAID,
+				amount,
+				paymentGateway: "cash",
+				billPaidAmount: Number(bill.paidAmount) + amount,
+				billDueAmount: outstanding - amount,
+				note: payload.note ?? null,
+			},
+		});
+
+		return payment;
+	});
+
+	await sendPaymentReceipt(paymentId);
+
+	return settled;
+};
+
 export const PaymentServices = {
 	getMyBills,
 	createPayment,
+	getCycleBills,
+	recordCashPayment,
 	paymentCallback,
 	getMyPayments,
 	getSinglePayment,

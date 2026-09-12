@@ -1,7 +1,7 @@
 model MemberBill {
   id String @id @default(uuid())
 
-  mealCount    Int
+  mealCount    Float
   mealCost     Decimal @db.Decimal(12, 2)
   sharedCost   Decimal @db.Decimal(12, 2)
   rentShare    Decimal @db.Decimal(12, 2)

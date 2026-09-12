@@ -1,16 +1,22 @@
 # MessMate — Entity Relationship Diagram
 
-12 models, one per schema file under `prisma/schema/`. Generated from the actual
-schema, so the diagram and the database cannot drift apart.
+12 models, one per schema file under `prisma/schema/`, and all 24 of their
+relations. The diagram is written by hand, so it can drift from the schema — it
+was last checked foreign key by foreign key: every `@relation` in
+`prisma/schema/` is drawn below, and every line below is a real `@relation`.
 
 ```mermaid
 erDiagram
     User ||--o{ MessMember : "lives in"
     User ||--o{ Mess : manages
     User ||--o{ AuditLog : "acted"
+    User |o--o{ BillingCycle : "closed"
+    User ||--o{ Deposit : "recorded"
+    User ||--o{ Expense : "recorded"
 
     Mess ||--o{ MessMember : has
     Mess ||--o{ BillingCycle : "one per month"
+    Mess ||--o{ AuditLog : "is audited in"
 
     BillingCycle ||--o{ MealEntry : records
     BillingCycle ||--o{ MealPlan : declares
@@ -26,6 +32,7 @@ erDiagram
     MessMember ||--o{ GroceryDuty : "on duty"
     MessMember ||--o{ MemberBill : owes
     MessMember ||--o{ Payment : made
+    MessMember |o--o{ AuditLog : "is the subject of"
 
     MemberBill ||--o{ Payment : "paid by"
 
@@ -39,6 +46,7 @@ erDiagram
         string id PK
         string managerId FK
         decimal monthlyRent
+        decimal monthlyDeposit
     }
     MessMember {
         string id PK
@@ -51,22 +59,24 @@ erDiagram
     BillingCycle {
         string id PK
         string messId FK
+        string closedById FK
         int year
         int month
         CycleStatus status
+        float totalMeals
         decimal mealRate
     }
     MealEntry {
         string id PK
         date date
-        int lunch
-        int dinner
+        float lunch
+        float dinner
     }
     MealPlan {
         string id PK
         date date
-        int lunch
-        int dinner
+        float lunch
+        float dinner
     }
     Expense {
         string id PK
@@ -74,10 +84,12 @@ erDiagram
         decimal amount
         SplitMethod splitMethod
         string paidByMemberId FK
+        string createdById FK
     }
     Deposit {
         string id PK
         decimal amount
+        string createdById FK
     }
     GroceryDuty {
         string id PK
@@ -86,6 +98,7 @@ erDiagram
     }
     MemberBill {
         string id PK
+        float mealCount
         decimal totalPayable
         decimal creditAmount
         decimal paidAmount
@@ -96,6 +109,7 @@ erDiagram
         string id PK
         decimal amount
         PaymentStatus status
+        string paymentGateway
         string bkashPaymentId UK
         string bkashTrxId
     }
@@ -103,6 +117,9 @@ erDiagram
         string id PK
         AuditAction action
         string entity
+        string actorId FK
+        string messId FK
+        string subjectMemberId FK
         json before
         json after
     }
@@ -122,6 +139,30 @@ Three relationships carry most of the design:
   Only entries are charged. Merging them would let a declaration quietly become
   a charge.
 
+## The audit trail
+
+An `AuditLog` row answers three questions, and each has its own column:
+
+| Column | Answers | Set on |
+| --- | --- | --- |
+| `actorId` | who did it | every row |
+| `messId` | which mess it happened in | every mess-scoped row |
+| `subjectMemberId` | who it was about | rows about one person |
+
+The two optional columns are what let the same table serve three readers. The
+platform admin reads everything. A manager reads the rows where `messId` is
+theirs. A member reads only the rows where `subjectMemberId` is their own
+membership — the meal a manager recorded against them, a deposit of theirs
+deleted, a payment of theirs settled.
+
+Closing or reopening a cycle touches every member at once, so it carries a
+`messId` but no subject, and never appears in a member's view. A role change or a
+block is a platform action with neither, so it never reaches any mess view.
+
+`subjectMemberId` points at `MessMember`, not `User`, for the same reason
+everything else does: a person in two messes has two memberships, and a meal in
+one mess is nothing to do with the other.
+
 ## Constraints that carry meaning
 
 | Constraint | Prevents |
@@ -140,5 +181,21 @@ because reopening a cycle deletes the bills so the settlement can be regenerated
 — a settled payment never reaches that path, since reopen is refused once any
 payment lands against the month.
 
+`AuditLog` cascades from its `Mess` and its subject `MessMember`, so a deleted
+mess takes its trail with it. Its `actorId` does the opposite — `ON DELETE
+RESTRICT` — so the database refuses to remove a user who has acted while that
+trail exists. The same holds for whoever recorded a deposit or an expense: a
+record of who did something is worth nothing if deleting them could erase it. In
+practice it never comes up, because accounts are soft-deleted and the row stays.
+
+`BillingCycle.closedById` is the one exception, and it is `SET NULL` on purpose:
+a closed month has to survive losing the name of whoever closed it.
+
 Nothing is hard-deleted through the API. `isDeleted` + `deletedAt` mark a row and
-every read filters them out. Money is `Decimal`, never `Float`.
+every read filters them out.
+
+Money is `Decimal`, never `Float`. Meal counts are the one deliberate `Float` —
+`MealEntry.lunch`/`.dinner`, `MealPlan.lunch`/`.dinner`,
+`MemberBill.mealCount` and `BillingCycle.totalMeals`: a real register records
+half meals, and multiples of `0.5` are exact in binary floating point, so nothing
+drifts. Validation enforces that step — a mess has half meals, not thirds.

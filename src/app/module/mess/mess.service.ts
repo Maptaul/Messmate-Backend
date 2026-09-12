@@ -1,10 +1,14 @@
 import httpStatus from "http-status";
+import type { AuditAction } from "../../../generated/prisma/enums";
 import {
 	CycleStatus,
 	MemberStatus,
 	Role,
 } from "../../../generated/prisma/enums";
-import type { MessWhereInput } from "../../../generated/prisma/models";
+import type {
+	AuditLogWhereInput,
+	MessWhereInput,
+} from "../../../generated/prisma/models";
 import type { IQuery } from "../../interfaces";
 import { prisma } from "../../lib/prisma";
 import type { RequestUser } from "../../middleware/checkAuth";
@@ -17,6 +21,7 @@ const messListSelect = {
 	name: true,
 	address: true,
 	monthlyRent: true,
+	monthlyDeposit: true,
 	createdAt: true,
 	manager: { select: { id: true, name: true, email: true } },
 	_count: { select: { members: true, cycles: true } },
@@ -44,6 +49,7 @@ const createMess = async (payload: ICreateMessPayload, user: RequestUser) => {
 				name: payload.name,
 				address: payload.address,
 				monthlyRent: payload.monthlyRent,
+				monthlyDeposit: payload.monthlyDeposit ?? 0,
 				managerId: user.userId,
 			},
 		});
@@ -63,8 +69,9 @@ const createMess = async (payload: ICreateMessPayload, user: RequestUser) => {
 };
 
 const getAllMesses = async (query: IQuery) => {
-	const limit = query.limit ? Number(query.limit) : 10;
-	const page = query.page ? Number(query.page) : 1;
+	const rawLimit = Math.floor(Number(query.limit)) || 10;
+	const limit = Math.min(Math.max(rawLimit, 1), 100);
+	const page = Math.max(Math.floor(Number(query.page)) || 1, 1);
 	const skip = (page - 1) * limit;
 	const sortBy = query.sortBy ? query.sortBy : "createdAt";
 	const sortOrder = query.sortOrder ? query.sortOrder : "desc";
@@ -106,8 +113,9 @@ const getAllMesses = async (query: IQuery) => {
 };
 
 const getMyMesses = async (query: IQuery, user: RequestUser) => {
-	const limit = query.limit ? Number(query.limit) : 10;
-	const page = query.page ? Number(query.page) : 1;
+	const rawLimit = Math.floor(Number(query.limit)) || 10;
+	const limit = Math.min(Math.max(rawLimit, 1), 100);
+	const page = Math.max(Math.floor(Number(query.page)) || 1, 1);
 	const skip = (page - 1) * limit;
 	const sortBy = query.sortBy ? query.sortBy : "createdAt";
 	const sortOrder = query.sortOrder ? query.sortOrder : "desc";
@@ -254,11 +262,85 @@ const deleteMess = async (messId: string, user: RequestUser) => {
 	});
 };
 
+const getMessAuditLogs = async (
+	messId: string,
+	query: IQuery,
+	user: RequestUser,
+) => {
+	const mess = await prisma.mess.findFirst({
+		where: { id: messId, isDeleted: false },
+		select: { id: true },
+	});
+
+	if (!mess) {
+		throw new AppError(httpStatus.NOT_FOUND, "Mess Not Found");
+	}
+
+	const membership = await checkMessAccess(messId, user);
+
+	const rawLimit = Math.floor(Number(query.limit)) || 10;
+	const limit = Math.min(Math.max(rawLimit, 1), 100);
+	const page = Math.max(Math.floor(Number(query.page)) || 1, 1);
+	const skip = (page - 1) * limit;
+	const sortOrder = query.sortOrder === "asc" ? "asc" : "desc";
+
+	const andConditions: AuditLogWhereInput[] = [{ messId }];
+
+	if (user.role === Role.MEMBER) {
+		andConditions.push({ subjectMemberId: membership?.id ?? "" });
+	} else if (query.memberId) {
+		andConditions.push({ subjectMemberId: query.memberId });
+	}
+
+	if (query.action) {
+		andConditions.push({ action: query.action as AuditAction });
+	}
+
+	if (query.entity) {
+		andConditions.push({ entity: query.entity });
+	}
+
+	if (query.actorId) {
+		andConditions.push({ actorId: query.actorId });
+	}
+
+	const where: AuditLogWhereInput = { AND: andConditions };
+
+	const [logs, total] = await Promise.all([
+		prisma.auditLog.findMany({
+			where,
+			take: limit,
+			skip,
+			orderBy: { createdAt: sortOrder },
+			select: {
+				id: true,
+				action: true,
+				entity: true,
+				entityId: true,
+				before: true,
+				after: true,
+				createdAt: true,
+				actor: { select: { id: true, name: true, email: true, role: true } },
+				subjectMember: {
+					select: { id: true, user: { select: { name: true } } },
+				},
+			},
+		}),
+		prisma.auditLog.count({ where }),
+	]);
+
+	return {
+		data: logs,
+		meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
+	};
+};
+
 export const MessServices = {
 	createMess,
 	getAllMesses,
 	getMyMesses,
 	getSingleMess,
+	getMessAuditLogs,
 	updateMess,
 	deleteMess,
 };

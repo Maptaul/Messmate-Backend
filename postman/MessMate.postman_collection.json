@@ -140,6 +140,26 @@
     {
       "key": "expenseDate",
       "value": ""
+    },
+    {
+      "key": "cronSecret",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "cycleBillId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "cycleBillDue",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "managerMemberId",
+      "value": "",
+      "type": "string"
     }
   ],
   "item": [
@@ -701,7 +721,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"GEC Chattogram Mess {{runId}}\",\n  \"address\": \"GEC Circle, Chattogram\",\n  \"monthlyRent\": 24000\n}"
+              "raw": "{\n  \"name\": \"GEC Chattogram Mess {{runId}}\",\n  \"address\": \"GEC Circle, Chattogram\",\n  \"monthlyRent\": 24000,\n  \"monthlyDeposit\": 600\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/mess/create-mess",
@@ -715,7 +735,7 @@
                 "create-mess"
               ]
             },
-            "description": "Creates the mess AND the manager own membership in one transaction. A manager who is not a member would drop out of every settlement.\n\nSaves `messId` automatically.\n\nThe name carries a per-run stamp from the Login (Manager) script. A manager cannot hold two messes with the same name, so a fixed name would make this collection runnable exactly once."
+            "description": "monthlyDeposit is the advance every member is charged each month for the coming month's bazaar fund. It appears on the bill as \"Next month's deposit\", and whatever a member has actually handed over is recorded as a Deposit against the cycle it funds. Leave it out or send 0 and the mess behaves as it did before - no advance, no carry-forward."
           }
         },
         {
@@ -847,7 +867,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"monthlyRent\": 26000\n}"
+              "raw": "{\n  \"monthlyRent\": 26000,\n  \"monthlyDeposit\": 600\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/mess/update-mess/{{messId}}",
@@ -862,6 +882,166 @@
                 "{{messId}}"
               ]
             }
+          }
+        },
+        {
+          "name": "Mess audit trail (Manager)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('the manager gets their mess trail', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.success).to.be.true;",
+                  "  pm.expect(body.data).to.be.an('array');",
+                  "  pm.expect(body.meta).to.have.property('total');",
+                  "});",
+                  "pm.test('every row names who did it', function () {",
+                  "  (pm.response.json().data || []).forEach(function (row) {",
+                  "    pm.expect(row.actor, 'actor on ' + row.action).to.be.an('object');",
+                  "    pm.expect(row).to.have.property('createdAt');",
+                  "  });",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/mess/audit-logs/{{messId}}?limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "mess",
+                "audit-logs",
+                "{{messId}}"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Everything that moved money or membership in this mess, newest first: cycle closed and reopened, every meal recorded, changed or deleted, deposits and expenses deleted, payments settled, members removed. Each row names the actor and, where it is about one person, the subject. A manager sees the whole mess and can narrow with ?memberId=. Platform actions such as a role change carry no messId and never appear here."
+          }
+        },
+        {
+          "name": "Mess audit trail (Member) - only their own",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('a member may read the trail', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('and sees nothing about anybody else', function () {",
+                  "  const mine = pm.variables.get('memberId');",
+                  "  (pm.response.json().data || []).forEach(function (row) {",
+                  "    pm.expect(row.subjectMember, 'subject on ' + row.action).to.not.be.null;",
+                  "    pm.expect(row.subjectMember.id, row.action).to.eql(mine);",
+                  "  });",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{memberToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/mess/audit-logs/{{messId}}?limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "mess",
+                "audit-logs",
+                "{{messId}}"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "The same endpoint read by a member. The scope is forced server-side from their own MessMember row, so they only ever see rows about themselves - a meal of theirs recorded or changed, their deposit deleted, their payment settled. Closing a cycle touches everybody and carries no subject, so it does not appear here."
+          }
+        },
+        {
+          "name": "A member cannot widen their own scope",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('the query string does not widen a member', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  const mine = pm.variables.get('memberId');",
+                  "  (pm.response.json().data || []).forEach(function (row) {",
+                  "    pm.expect(row.subjectMember.id).to.eql(mine);",
+                  "  });",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{memberToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/mess/audit-logs/{{messId}}?memberId={{managerMemberId}}&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "mess",
+                "audit-logs",
+                "{{messId}}"
+              ],
+              "query": [
+                {
+                  "key": "memberId",
+                  "value": "{{managerMemberId}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "The member asks for somebody else's rows by passing ?memberId=. It changes nothing: the filter for a member is taken from their own membership on the server, not from the query string. Run 'Mess members' first so managerMemberId is set."
           }
         }
       ]
@@ -934,7 +1114,11 @@
                   "  console.log('memberId saved:', removable.id);",
                   "} else {",
                   "  console.log('no removable member found - run Add member first');",
-                  "}"
+                  "}",
+                  "",
+                  "const rows = pm.response.json().data || [];",
+                  "const manager = rows.find(function (m) { return m.user && m.user.email === pm.collectionVariables.get('managerEmail'); });",
+                  "if (manager) { pm.collectionVariables.set('managerMemberId', manager.id); }"
                 ]
               }
             }
@@ -1145,8 +1329,34 @@
                 "{{cycleId}}"
               ]
             },
-            "description": "The graded core: computes the meal rate, splits every shared expense, prorates rent by tenure, credits deposits and self-paid expenses, and writes one MemberBill per member. Uses a conditional update so firing this twice at once yields one 200 and one 409, never two sets of bills."
-          }
+            "description": "Closes the month and generates every member's bill. totalPayable is openingBalance + mealCost + sharedCost + rentShare + advanceCharged, and dueAmount takes off what they already put in. openingBalance is whatever they still owed when the previous month closed; advanceCharged is the mess's monthlyDeposit for the month ahead. warnings flags a cycle that took deposits without recording the fund's own grocery expense."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('the month closes and bills are generated', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().success).to.be.true;",
+                  "});",
+                  "pm.test('every bill shows the whole sum, line by line', function () {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.data).to.have.property('warnings');",
+                  "  (body.data.bills || []).forEach(function (b) {",
+                  "    ['openingBalance','mealCost','sharedCost','rentShare','advanceCharged','totalPayable','creditAmount','dueAmount'].forEach(function (k) {",
+                  "      pm.expect(b, k).to.have.property(k);",
+                  "    });",
+                  "    const lines = Number(b.openingBalance) + Number(b.mealCost) + Number(b.sharedCost) + Number(b.rentShare) + Number(b.advanceCharged);",
+                  "    pm.expect(Number(lines.toFixed(2)), 'lines add up for ' + b.memberId).to.eql(Number(b.totalPayable));",
+                  "    pm.expect(Number((Number(b.totalPayable) - Number(b.creditAmount)).toFixed(2))).to.eql(Number(b.dueAmount));",
+                  "  });",
+                  "});"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Reopen cycle (Admin only)",
@@ -2301,6 +2511,32 @@
           }
         },
         {
+          "name": "Payment result page",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payment/result?status=success",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payment",
+                "result"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "success"
+                }
+              ]
+            },
+            "description": "The page a payer lands on after bKash. Public, returns HTML rather than JSON. Try status=failure and status=cancel too; anything unrecognised is treated as a failure."
+          }
+        },
+        {
           "name": "403 - pay a bill that is not yours",
           "request": {
             "method": "POST",
@@ -2364,6 +2600,243 @@
               ]
             },
             "description": "A well-formed id that belongs to nothing."
+          }
+        },
+        {
+          "name": "Cycle bills (Manager)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('manager sees every bill in the cycle', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.success).to.be.true;",
+                  "  pm.expect(body.data).to.be.an('array');",
+                  "  pm.expect(body.meta).to.have.property('total');",
+                  "});",
+                  "const rows = pm.response.json().data || [];",
+                  "const owing = rows.find(function (b) { return Number(b.dueAmount) > 0; });",
+                  "if (owing) {",
+                  "  pm.collectionVariables.set('cycleBillId', owing.id);",
+                  "  pm.collectionVariables.set('cycleBillDue', owing.dueAmount);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payment/cycle-bills/{{cycleId}}?limit=50",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payment",
+                "cycle-bills",
+                "{{cycleId}}"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
+            },
+            "description": "Every bill in one cycle, with the member's name and what they still owe. Manager or admin only - a member gets 403, because this is the whole mess's money, not theirs. This is how a manager finds the billId to record a cash payment against; /my-bills only ever returns the caller's own bills. Supports ?status=UNPAID|PARTIAL|PAID and ?searchTerm= on the member's name or email."
+          }
+        },
+        {
+          "name": "Record cash payment (Manager)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"billId\": \"{{billId}}\",\n  \"amount\": 50,\n  \"note\": \"Handed over at dinner\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payment/record-cash-payment",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payment",
+                "record-cash-payment"
+              ]
+            },
+            "description": "A member paid the manager in cash. Manager-only. The bill's paidAmount goes up, the due comes down, an audit row is written and the same receipt email goes out with the method shown as cash."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('cash payment recorded', function () {",
+                  "  pm.response.to.have.status(201);",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.success).to.be.true;",
+                  "  pm.expect(body.data.paymentGateway).to.eql('cash');",
+                  "  pm.expect(body.data.status).to.eql('PAID');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "400 - cash payment larger than the bill",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"billId\": \"{{billId}}\",\n  \"amount\": 9999999\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payment/record-cash-payment",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payment",
+                "record-cash-payment"
+              ]
+            },
+            "description": "Overpaying is refused. The manager cannot record more cash than the bill still owes."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('overpayment refused', function () {",
+                  "  pm.response.to.have.status(400);",
+                  "  pm.expect(pm.response.json().success).to.be.false;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "403 - member cannot record their own cash payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{memberToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"billId\": \"{{billId}}\",\n  \"amount\": 10\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payment/record-cash-payment",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payment",
+                "record-cash-payment"
+              ]
+            },
+            "description": "Only a manager or admin may record cash. A member cannot mark their own bill paid."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('member is refused', function () {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([401, 403]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "403 - member cannot read cycle bills",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('member is refused', function () {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([401, 403]);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{memberToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payment/cycle-bills/{{cycleId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payment",
+                "cycle-bills",
+                "{{cycleId}}"
+              ]
+            },
+            "description": "A member cannot read the whole mess's bills. Their own are at /my-bills."
           }
         }
       ]
@@ -2887,7 +3360,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Not Allowed\",\n  \"address\": \"Nowhere\",\n  \"monthlyRent\": 100\n}"
+              "raw": "{\n  \"name\": \"Not Allowed\",\n  \"address\": \"Nowhere\",\n  \"monthlyRent\": 100,\n  \"monthlyDeposit\": 600\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/mess/create-mess",
@@ -2919,7 +3392,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"monthlyRent\": 1\n}"
+              "raw": "{\n  \"monthlyRent\": 1,\n  \"monthlyDeposit\": 600\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/mess/update-mess/{{messId}}",
@@ -3107,6 +3580,94 @@
                 "add-member"
               ]
             }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Scheduled jobs",
+      "description": "Called by Vercel Cron, not by people. They need the CRON_SECRET as a bearer token. Every request here uses dryRun=true, which reports who would be emailed without sending anything - safe to run against production.",
+      "item": [
+        {
+          "name": "Meal plan reminder (dry run)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{cronSecret}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/cron/meal-plan-reminder?dryRun=true",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "cron",
+                "meal-plan-reminder"
+              ],
+              "query": [
+                {
+                  "key": "dryRun",
+                  "value": "true"
+                }
+              ]
+            },
+            "description": "Members of an open cycle with no plan set for tomorrow. Runs for real at 16:00 UTC, an hour before the 11 PM Dhaka cutoff."
+          }
+        },
+        {
+          "name": "Unpaid bill reminder (dry run)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{cronSecret}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/cron/unpaid-bill-reminder?dryRun=true",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "cron",
+                "unpaid-bill-reminder"
+              ],
+              "query": [
+                {
+                  "key": "dryRun",
+                  "value": "true"
+                }
+              ]
+            },
+            "description": "Members whose bill on a closed cycle is still unpaid or partly paid. Runs for real on Mondays at 04:00 UTC."
+          }
+        },
+        {
+          "name": "Scheduled job without the secret (401)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/cron/meal-plan-reminder",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "cron",
+                "meal-plan-reminder"
+              ]
+            },
+            "description": "No Authorization header, so the job refuses. Confirms these endpoints are not open to the internet."
           }
         }
       ]

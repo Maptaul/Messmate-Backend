@@ -9,6 +9,8 @@ export default {
 	database_url: process.env.DATABASE_URL,
 	backend_url: process.env.BACKEND_URL!,
 	frontend_url: process.env.FRONTEND_URL,
+	payment_result_url: process.env.PAYMENT_RESULT_URL,
+	cron_secret: process.env.CRON_SECRET,
 
 	bcrypt_salt_rounds: process.env.BCRYPT_SALT_ROUNDS,
 	jwt_access_secret: process.env.JWT_ACCESS_SECRET!,

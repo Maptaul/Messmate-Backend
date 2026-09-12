@@ -394,7 +394,7 @@ const applyPlanToRegister = async (
 	}
 
 	const existing = await prisma.mealEntry.findMany({
-		where: { cycleId: payload.cycleId, date, isDeleted: false },
+		where: { cycleId: payload.cycleId, date },
 		select: { memberId: true },
 	});
 

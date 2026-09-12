@@ -3,9 +3,8 @@
 **Base URL:** `https://messmatebackend.vercel.app`
 **Local:** `http://localhost:5000`
 
-62 endpoints across 12 modules, all versioned under `/api/v1`. The runnable version of this reference is `postman/MessMate.postman_collection.json` — 91
-requests that chain their own tokens and ids, verified against the live
-deployment (83 passed, 0 failed, 8 manual).
+68 endpoints across 13 modules, all versioned under `/api/v1`. The runnable version of this reference is `postman/MessMate.postman_collection.json` — 103
+requests that chain their own tokens and ids.
 
 ---
 
@@ -55,9 +54,14 @@ Every endpoint answers with the same envelope.
   "success": false,
   "statusCode": 400,
   "message": "Not a valid email",
-  "errors": [{ "field": "email", "message": "Not a valid email" }]
+  "errors": [{ "field": "email", "message": "Not a valid email" }],
+  "requestId": "a3f1c2e4-5b6d-7890-abcd-ef1234567890"
 }
 ```
+
+`requestId` is also returned on every response as the `x-request-id` header, and
+it is the id written into the server log line for that request. If someone
+reports a failure, that one value finds the log entry behind it.
 
 | Code | Meaning |
 | --- | --- |
@@ -72,7 +76,9 @@ Every endpoint answers with the same envelope.
 
 ## Query parameters
 
-List endpoints accept `?page=` and `?limit=` (default 1 and 10), `?sortBy=` and
+List endpoints accept `?page=` and `?limit=` (default 1 and 10, `limit` capped
+at 100 — a bigger number is clamped rather than refused, and a zero, negative or
+non-numeric one falls back to the default), `?sortBy=` and
 `?sortOrder=asc|desc`. Where a search makes sense — messes, members, expenses,
 meals, users — `?searchTerm=` matches the relevant text fields
 case-insensitively. Domain filters are per endpoint: `?role=` and `?status=` on
@@ -114,6 +120,8 @@ users, `?type=` on expenses, `?memberId=` on meals and deposits, `?action=` and
 | GET | `/api/v1/mess/my-messes` | `MESS_MANAGER` `MEMBER` | — |  |
 | PATCH | `/api/v1/mess/update-mess/:messId` | `ADMIN` `MESS_MANAGER` | yes |  |
 | DELETE | `/api/v1/mess/delete-mess/:messId` | `ADMIN` `MESS_MANAGER` | — |  |
+| GET | `/api/v1/mess/audit-logs/:messId` | `ADMIN` `MESS_MANAGER` `MEMBER` | — | the trail; a member sees only their own |
+
 | GET | `/api/v1/mess/:messId` | `ADMIN` `MESS_MANAGER` `MEMBER` | — |  |
 
 ### Member — `/api/v1/member`
@@ -189,8 +197,11 @@ users, `?type=` on expenses, `?memberId=` on meals and deposits, `?action=` and
 | Method | Path | Roles | Validated | Notes |
 | --- | --- | --- | :-: | --- |
 | GET | `/api/v1/payment/callback` | _public_ | — |  |
+| GET | `/api/v1/payment/result` | _public_ | — | HTML page the payer lands on |
 | GET | `/api/v1/payment/my-bills` | `MESS_MANAGER` `MEMBER` | — |  |
 | POST | `/api/v1/payment/create-payment` | `MESS_MANAGER` `MEMBER` | yes |  |
+| GET | `/api/v1/payment/cycle-bills/:cycleId` | `ADMIN` `MESS_MANAGER` | — | every bill in one cycle |
+| POST | `/api/v1/payment/record-cash-payment` | `ADMIN` `MESS_MANAGER` | yes | cash handed to the manager |
 | GET | `/api/v1/payment/my-payments` | `MESS_MANAGER` `MEMBER` | — |  |
 | GET | `/api/v1/payment/:paymentId` | `ADMIN` `MESS_MANAGER` `MEMBER` | — |  |
 
@@ -204,6 +215,43 @@ users, `?type=` on expenses, `?memberId=` on meals and deposits, `?action=` and
 | GET | `/api/v1/admin/users/:userId` | `ADMIN` | — |  |
 | PATCH | `/api/v1/admin/users/:userId/role` | `ADMIN` | yes |  |
 | PATCH | `/api/v1/admin/users/:userId/status` | `ADMIN` | yes |  |
+
+### The monthly advance
+
+`POST /api/v1/mess/create-mess` and the update route accept `monthlyDeposit` —
+the amount each member is charged every month for the **next** month's bazaar
+fund. It defaults to `0`, which leaves a mess behaving as it did before.
+
+When a cycle closes with `monthlyDeposit > 0`, every bill carries
+`advanceCharged`, and `openingBalance` picks up whatever that member still owed
+on the previous closed cycle of the same mess — negative when the mess owes
+them. So `totalPayable` is now:
+
+```
+openingBalance + mealCost + sharedCost + rentShare + advanceCharged
+```
+
+`creditAmount` is unchanged: the deposits recorded against *this* cycle plus the
+expenses this member paid out of pocket. A member who settles in full opens the
+next month at zero.
+
+### Scheduled jobs — `/api/v1/cron`
+
+Not for people. These are called by Vercel Cron, which sends
+`Authorization: Bearer $CRON_SECRET`. Without that header they answer `401`, and
+if `CRON_SECRET` is not configured at all they answer `503`. Add `?dryRun=true`
+to any of them to see who *would* be emailed without sending anything.
+
+| Method | Path | Roles | Validated | Notes |
+| --- | --- | --- | :-: | --- |
+| GET | `/api/v1/cron/meal-plan-reminder` | _cron secret_ | — | daily 16:00 UTC (22:00 Dhaka) |
+| GET | `/api/v1/cron/unpaid-bill-reminder` | _cron secret_ | — | Mondays 04:00 UTC |
+
+The meal-plan job runs an hour before the 11 PM Dhaka cutoff and emails every
+active member of an open cycle who has not set a plan for tomorrow. The
+unpaid-bill job emails members whose bill on a closed cycle is still `UNPAID` or
+`PARTIAL` with money owing. It runs weekly rather than daily, so an unpaid bill
+is a nudge instead of a daily nag.
 
 ---
 
@@ -222,6 +270,36 @@ bKash  -> GET /api/v1/payment/callback?paymentID=...&status=...
           -> 302 redirect back to the frontend
 ```
 
+### Paying in cash
+
+Most mess money is still notes in a hand. `POST /api/v1/payment/record-cash-payment`
+takes `{ billId, amount, note? }` and is manager-only — a member cannot mark
+their own bill paid.
+
+The manager finds that `billId` through
+`GET /api/v1/payment/cycle-bills/:cycleId`, which lists every bill in one cycle
+with the member's name and what they still owe, ordered by the largest due
+first. `/my-bills` only ever returns the caller's own bills, so without this a
+manager had no way to reach anyone else's. It takes the usual `?page=`,
+`?limit=`, plus `?status=UNPAID|PARTIAL|PAID` and `?searchTerm=` on the member's
+name or email. A member calling it gets a `403` — it is the whole mess's money,
+not theirs.
+
+It does exactly what the bKash path does after verification: adds to
+`paidAmount`, recomputes `dueAmount`, moves the bill to `PARTIAL` or `PAID`, and
+writes a `PAYMENT_SETTLED` audit row with the manager as the actor. The `Payment`
+row it creates carries `paymentGateway: "cash"`, so cash and bKash sit in the
+same ledger and the same `my-payments` list.
+
+Overpaying is refused with a `400` naming what is actually left, and the bill
+update is conditional on the `paidAmount` it read, so two managers recording the
+same cash at once cannot double-credit it — the second gets a `409`.
+
+The member gets the same receipt email and PDF, with the method shown as cash
+rather than a bKash transaction id.
+
+### The bKash callback
+
 The callback is a public GET whose query string arrives through the user browser, so its contents are not trusted. Settlement requires all four of
 `statusCode 0000`, `transactionStatus Completed`, `currency BDT` and an amount
 matching the row we created. It runs behind a conditional update, so a refreshed callback credits the bill once.
@@ -233,8 +311,30 @@ matching the row we created. It runs behind a conditional update, so a refreshed
 - **Soft deletes.** Nothing is removed from the database. `DELETE` endpoints set
   `isDeleted` and `deletedAt`, and every read filters them out.
 - **Audit log.** Cycle closed and reopened, member removed, expense and deposit
-  deleted, payment settled, role changed, user blocked and unblocked — each with
-  the actor and the before/after state, readable at `GET /api/v1/admin/audit-logs`.
+  deleted, payment settled, role changed, user blocked and unblocked, and every
+  meal recorded, changed or deleted — each with the actor and the before/after
+  state. Meals are on that list because a meal is money: the manager may write
+  anyone's row, with no cutoff, but never anonymously.
+
+  Two ways in. `GET /api/v1/admin/audit-logs` is the platform view, `ADMIN` only,
+  every mess. `GET /api/v1/mess/audit-logs/:messId` is the mess view, and the
+  role decides how much of it you get:
+
+  | Caller | Sees |
+  | --- | --- |
+  | `ADMIN` | the whole mess; `?memberId=` narrows it |
+  | `MESS_MANAGER` | their own mess; `403` on anyone else's; `?memberId=` narrows it |
+  | `MEMBER` | only rows about themselves, in a mess they belong to |
+
+  A member's scope comes from their own `MessMember` row, resolved server-side by
+  `checkMessAccess` — passing `?memberId=` someone else changes nothing.
+
+  Every mess-scoped row carries `messId`, and rows about one person also carry
+  `subjectMemberId`: meals recorded, changed and deleted, a deposit deleted, a
+  payment settled, a member removed. Closing or reopening a cycle touches
+  everybody, so it carries no subject and a member does not see it. Platform
+  actions — role changes, blocks — carry no `messId` at all and stay on the admin
+  view alone. All of them take `?action=`, `?entity=` and `?actorId=`.
 - **Two-layer authorization.** `auth(...)` proves the account type;
   `checkMessAccess` proves the mess is the caller's. Both are required on any
   route that takes a `messId` or a `cycleId`.

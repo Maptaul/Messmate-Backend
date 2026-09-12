@@ -121,8 +121,9 @@ const getMessMembers = async (
 
 	await checkMessAccess(messId, user);
 
-	const limit = query.limit ? Number(query.limit) : 10;
-	const page = query.page ? Number(query.page) : 1;
+	const rawLimit = Math.floor(Number(query.limit)) || 10;
+	const limit = Math.min(Math.max(rawLimit, 1), 100);
+	const page = Math.max(Math.floor(Number(query.page)) || 1, 1);
 	const skip = (page - 1) * limit;
 	const sortBy = query.sortBy ? query.sortBy : "joinedAt";
 	const sortOrder = query.sortOrder ? query.sortOrder : "asc";
@@ -168,8 +169,9 @@ const getMessMembers = async (
 };
 
 const getMyMemberships = async (query: IQuery, user: RequestUser) => {
-	const limit = query.limit ? Number(query.limit) : 10;
-	const page = query.page ? Number(query.page) : 1;
+	const rawLimit = Math.floor(Number(query.limit)) || 10;
+	const limit = Math.min(Math.max(rawLimit, 1), 100);
+	const page = Math.max(Math.floor(Number(query.page)) || 1, 1);
 	const skip = (page - 1) * limit;
 	const sortBy = query.sortBy ? query.sortBy : "joinedAt";
 	const sortOrder = query.sortOrder ? query.sortOrder : "desc";
@@ -272,6 +274,8 @@ const removeMember = async (memberId: string, user: RequestUser) => {
 		await writeAudit(tx, {
 			actorId: user.userId,
 			action: AuditAction.MEMBER_REMOVED,
+			messId: member.messId,
+			subjectMemberId: memberId,
 			entity: "MessMember",
 			entityId: memberId,
 			before: { status: member.status },

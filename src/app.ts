@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import express, {
@@ -13,6 +14,7 @@ import { notFound } from "./app/middleware/notFound";
 import { authLimiter, generalLimiter } from "./app/middleware/rateLimiter";
 import { AdminRoutes } from "./app/module/admin/admin.route";
 import { AuthRoutes } from "./app/module/auth/auth.route";
+import { CronRoutes } from "./app/module/cron/cron.route";
 import { CycleRoutes } from "./app/module/cycle/cycle.route";
 import { DepositRoutes } from "./app/module/deposit/deposit.route";
 import { ExpenseRoutes } from "./app/module/expense/expense.route";
@@ -27,6 +29,15 @@ import { UserRoutes } from "./app/module/user/user.route";
 const app: Application = express();
 
 app.use(helmet());
+
+app.use((_req, res, next) => {
+	const requestId = randomUUID();
+
+	res.locals.requestId = requestId;
+	res.setHeader("x-request-id", requestId);
+
+	next();
+});
 
 app.use(
 	cors({
@@ -54,6 +65,7 @@ app.use("/api/v1/grocery-duty", GroceryDutyRoutes);
 app.use("/api/v1/deposit", DepositRoutes);
 app.use("/api/v1/payment", PaymentRoutes);
 app.use("/api/v1/admin", AdminRoutes);
+app.use("/api/v1/cron", CronRoutes);
 
 app.get("/", async (_req: Request, res: Response) => {
 	res.status(httpStatus.OK).json({

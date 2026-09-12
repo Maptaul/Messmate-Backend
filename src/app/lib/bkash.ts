@@ -1,18 +1,18 @@
 import httpStatus from "http-status";
 import config from "../config";
 import { AppError } from "../utils/AppError";
-import { redisClient } from "./redis";
+import { redis } from "./redis";
 
 export const getBkashIdToken = async () => {
 	try {
 		const IdTokenKey = "bkash:idToken";
 		const RefreshTokenKey = "bkash:refreshToken";
 
-		let bkashIdToken = await redisClient.get(IdTokenKey);
-		const bkashIdTokenTTL = await redisClient.ttl(IdTokenKey);
+		let bkashIdToken = await redis.get(IdTokenKey);
+		const bkashIdTokenTTL = await redis.ttl(IdTokenKey);
 
-		const bkashRefreshToken = await redisClient.get(RefreshTokenKey);
-		const bkashRefreshTokenTTL = await redisClient.ttl(RefreshTokenKey);
+		const bkashRefreshToken = await redis.get(RefreshTokenKey);
+		const bkashRefreshTokenTTL = await redis.ttl(RefreshTokenKey);
 
 		if (
 			(bkashIdTokenTTL <= 600 || !bkashIdToken) &&
@@ -47,7 +47,7 @@ export const getBkashIdToken = async () => {
 
 			bkashIdToken = bkashRefreshTokenResult.id_token as string;
 
-			await redisClient.set(IdTokenKey, bkashIdToken, {
+			await redis.set(IdTokenKey, bkashIdToken, {
 				expiration: {
 					type: "EX",
 					value: 60 * 60,
@@ -87,14 +87,14 @@ export const getBkashIdToken = async () => {
 
 		const result = await response.json();
 
-		await redisClient.set(IdTokenKey, result.id_token, {
+		await redis.set(IdTokenKey, result.id_token, {
 			expiration: {
 				type: "EX",
 				value: 60 * 60,
 			},
 		});
 
-		await redisClient.set(RefreshTokenKey, result.refresh_token, {
+		await redis.set(RefreshTokenKey, result.refresh_token, {
 			expiration: {
 				type: "EX",
 				value: 60 * 60 * 24 * 28,

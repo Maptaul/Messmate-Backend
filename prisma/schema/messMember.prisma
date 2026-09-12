@@ -24,6 +24,7 @@ model MessMember {
   deposits      Deposit[]
   bills         MemberBill[]
   payments      Payment[]
+  auditLogs     AuditLog[]
 
   @@unique([messId, userId])
   @@index([messId, status])

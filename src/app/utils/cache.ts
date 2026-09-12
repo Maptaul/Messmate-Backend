@@ -1,4 +1,4 @@
-import { redisClient } from "../lib/redis";
+import { redis } from "../lib/redis";
 
 export const cached = async <T>(
 	key: string,
@@ -6,7 +6,7 @@ export const cached = async <T>(
 	load: () => Promise<T>,
 ): Promise<T> => {
 	try {
-		const hit = await redisClient.get(key);
+		const hit = await redis.get(key);
 
 		if (hit) {
 			return JSON.parse(hit) as T;
@@ -16,7 +16,7 @@ export const cached = async <T>(
 	const fresh = await load();
 
 	try {
-		await redisClient.set(key, JSON.stringify(fresh), {
+		await redis.set(key, JSON.stringify(fresh), {
 			expiration: { type: "EX", value: ttlSeconds },
 		});
 	} catch {}
@@ -26,7 +26,7 @@ export const cached = async <T>(
 
 export const invalidateCache = async (key: string) => {
 	try {
-		await redisClient.del(key);
+		await redis.del(key);
 	} catch {}
 };
 

@@ -14,7 +14,12 @@ import { AppError } from "../../utils/AppError";
 import { writeAudit } from "../../utils/audit";
 import { checkMessAccess } from "../../utils/checkMessAccess";
 import type { IOpenCyclePayload } from "./cycle.interface";
-import { computeSettlement, type SettlementMember } from "./cycle.settlement";
+import { sendBillsWithdrawn, sendCycleBills } from "./cycle.mail";
+import {
+	computeSettlement,
+	depositFundedGroceryWarning,
+	type SettlementMember,
+} from "./cycle.settlement";
 
 const cycleSelect = {
 	id: true,
@@ -129,8 +134,9 @@ const getMessCycles = async (
 
 	await checkMessAccess(messId, user);
 
-	const limit = query.limit ? Number(query.limit) : 10;
-	const page = query.page ? Number(query.page) : 1;
+	const rawLimit = Math.floor(Number(query.limit)) || 10;
+	const limit = Math.min(Math.max(rawLimit, 1), 100);
+	const page = Math.max(Math.floor(Number(query.page)) || 1, 1);
 	const skip = (page - 1) * limit;
 
 	const sortOrder = query.sortOrder === "asc" ? "asc" : "desc";
@@ -227,7 +233,9 @@ const closeCycle = async (cycleId: string, user: RequestUser) => {
 			month: true,
 			status: true,
 			messId: true,
-			mess: { select: { monthlyRent: true } },
+			mess: {
+				select: { name: true, monthlyRent: true, monthlyDeposit: true },
+			},
 		},
 	});
 
@@ -244,7 +252,7 @@ const closeCycle = async (cycleId: string, user: RequestUser) => {
 		);
 	}
 
-	return prisma.$transaction(async (tx) => {
+	const outcome = await prisma.$transaction(async (tx) => {
 		const claimed = await tx.billingCycle.updateMany({
 			where: { id: cycleId, status: CycleStatus.OPEN },
 			data: {
@@ -265,7 +273,12 @@ const closeCycle = async (cycleId: string, user: RequestUser) => {
 
 				OR: [{ status: MemberStatus.ACTIVE }, { leftAt: { not: null } }],
 			},
-			select: { id: true, joinedAt: true, leftAt: true },
+			select: {
+				id: true,
+				joinedAt: true,
+				leftAt: true,
+				user: { select: { name: true, email: true } },
+			},
 		});
 
 		const [mealTotals, expenses, deposits] = await Promise.all([
@@ -311,11 +324,34 @@ const closeCycle = async (cycleId: string, user: RequestUser) => {
 			);
 		}
 
+		const previousCycle = await tx.billingCycle.findFirst({
+			where: {
+				messId: cycle.messId,
+				status: CycleStatus.CLOSED,
+				OR: [
+					{ year: { lt: cycle.year } },
+					{ year: cycle.year, month: { lt: cycle.month } },
+				],
+			},
+			orderBy: [{ year: "desc" }, { month: "desc" }],
+			select: {
+				bills: { select: { memberId: true, dueAmount: true } },
+			},
+		});
+
+		const openingByMember = new Map(
+			(previousCycle?.bills ?? []).map((bill) => [
+				bill.memberId,
+				Number(bill.dueAmount),
+			]),
+		);
+
 		const settlementMembers: SettlementMember[] = members.map((member) => ({
 			memberId: member.id,
 			mealCount: mealByMember.get(member.id) ?? 0,
 			depositTotal: depositByMember.get(member.id) ?? 0,
 			paidExpenseTotal: paidByMember.get(member.id) ?? 0,
+			openingBalance: openingByMember.get(member.id) ?? 0,
 			daysPresent: daysPresentInCycle(
 				cycle.year,
 				cycle.month,
@@ -332,7 +368,16 @@ const closeCycle = async (cycleId: string, user: RequestUser) => {
 				splitMethod: e.splitMethod,
 			})),
 			monthlyRent: Number(cycle.mess.monthlyRent),
+			monthlyDeposit: Number(cycle.mess.monthlyDeposit),
 			daysInMonth: daysInMonth(cycle.year, cycle.month),
+		});
+
+		const warning = depositFundedGroceryWarning({
+			depositTotal: [...depositByMember.values()].reduce(
+				(sum, amount) => sum + amount,
+				0,
+			),
+			expenses,
 		});
 
 		if (result.bills.length > 0) {
@@ -364,6 +409,7 @@ const closeCycle = async (cycleId: string, user: RequestUser) => {
 		await writeAudit(tx, {
 			actorId: user.userId,
 			action: AuditAction.CYCLE_CLOSED,
+			messId: cycle.messId,
 			entity: "BillingCycle",
 			entityId: cycleId,
 			before: { status: CycleStatus.OPEN },
@@ -375,14 +421,46 @@ const closeCycle = async (cycleId: string, user: RequestUser) => {
 			},
 		});
 
-		return { cycle: closed, bills: result.bills };
+		return {
+			cycle: closed,
+			bills: result.bills,
+			warnings: warning ? [warning] : [],
+			result,
+			recipients: members.map((member) => ({
+				memberId: member.id,
+				name: member.user.name,
+				email: member.user.email,
+			})),
+		};
 	});
+
+	await sendCycleBills({
+		cycleId,
+		messName: cycle.mess.name,
+		year: cycle.year,
+		month: cycle.month,
+		result: outcome.result,
+		recipients: outcome.recipients,
+	});
+
+	return {
+		cycle: outcome.cycle,
+		bills: outcome.bills,
+		warnings: outcome.warnings,
+	};
 };
 
 const reopenCycle = async (cycleId: string, user: RequestUser) => {
 	const cycle = await prisma.billingCycle.findUnique({
 		where: { id: cycleId },
-		select: { id: true, status: true, messId: true },
+		select: {
+			id: true,
+			status: true,
+			messId: true,
+			year: true,
+			month: true,
+			mess: { select: { name: true } },
+		},
 	});
 
 	if (!cycle) {
@@ -423,7 +501,15 @@ const reopenCycle = async (cycleId: string, user: RequestUser) => {
 		);
 	}
 
-	return prisma.$transaction(async (tx) => {
+	const withdrawn = await prisma.memberBill.findMany({
+		where: { cycleId },
+		select: {
+			dueAmount: true,
+			member: { select: { user: { select: { name: true, email: true } } } },
+		},
+	});
+
+	const reopened = await prisma.$transaction(async (tx) => {
 		const removed = await tx.memberBill.deleteMany({ where: { cycleId } });
 
 		const reopened = await tx.billingCycle.update({
@@ -442,6 +528,7 @@ const reopenCycle = async (cycleId: string, user: RequestUser) => {
 		await writeAudit(tx, {
 			actorId: user.userId,
 			action: AuditAction.CYCLE_REOPENED,
+			messId: cycle.messId,
 			entity: "BillingCycle",
 			entityId: cycleId,
 			before: { status: CycleStatus.CLOSED },
@@ -450,6 +537,20 @@ const reopenCycle = async (cycleId: string, user: RequestUser) => {
 
 		return reopened;
 	});
+
+	await sendBillsWithdrawn({
+		cycleId,
+		messName: cycle.mess.name,
+		year: cycle.year,
+		month: cycle.month,
+		withdrawn: withdrawn.map((bill) => ({
+			name: bill.member.user.name,
+			email: bill.member.user.email,
+			previousDue: Number(bill.dueAmount),
+		})),
+	});
+
+	return reopened;
 };
 
 export const CycleServices = {

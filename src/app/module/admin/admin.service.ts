@@ -38,8 +38,9 @@ const userSelect = {
 };
 
 const getAllUsers = async (query: IQuery) => {
-	const limit = query.limit ? Number(query.limit) : 10;
-	const page = query.page ? Number(query.page) : 1;
+	const rawLimit = Math.floor(Number(query.limit)) || 10;
+	const limit = Math.min(Math.max(rawLimit, 1), 100);
+	const page = Math.max(Math.floor(Number(query.page)) || 1, 1);
 	const skip = (page - 1) * limit;
 	const sortBy = query.sortBy ? query.sortBy : "createdAt";
 	const sortOrder = query.sortOrder === "asc" ? "asc" : "desc";
@@ -238,8 +239,9 @@ const changeUserStatus = async (
 };
 
 const getAuditLogs = async (query: IQuery) => {
-	const limit = query.limit ? Number(query.limit) : 10;
-	const page = query.page ? Number(query.page) : 1;
+	const rawLimit = Math.floor(Number(query.limit)) || 10;
+	const limit = Math.min(Math.max(rawLimit, 1), 100);
+	const page = Math.max(Math.floor(Number(query.page)) || 1, 1);
 	const skip = (page - 1) * limit;
 	const sortOrder = query.sortOrder === "asc" ? "asc" : "desc";
 
