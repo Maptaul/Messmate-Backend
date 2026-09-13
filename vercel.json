@@ -6,9 +6,7 @@
       "use": "@vercel/node",
       "config": {
         "includeFiles": [
-          "src/app/templates/**",
-          "node_modules/.pnpm/pdfkit@*/node_modules/pdfkit/js/**",
-          "node_modules/pdfkit/js/**"
+          "src/app/templates/**"
         ]
       }
     }
