@@ -1,7 +1,41 @@
 import httpStatus from "http-status";
 import config from "../config";
+import type { IBkashExecuteResult } from "../module/payment/payment.interface";
 import { AppError } from "../utils/AppError";
 import { redis } from "./redis";
+
+// bKash's guidance: when execute answers with something unreadable, ask
+// payment/status before deciding. The sandbox has sent execute bodies that are
+// not valid JSON. null means neither call gave a usable answer, so the caller
+// must leave the payment untouched: money may still have moved.
+export const executeBkashPayment = async (
+	idToken: string,
+	paymentID: string,
+): Promise<IBkashExecuteResult | null> => {
+	for (const path of ["execute", "payment/status"]) {
+		try {
+			const response = await fetch(
+				`${config.bkash_base_url}/tokenized/checkout/${path}`,
+				{
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+						Accept: "application/json",
+						authorization: idToken,
+						"x-app-key": config.bkash_app_key,
+					},
+					body: JSON.stringify({ paymentID }),
+				},
+			);
+
+			return (await response.json()) as IBkashExecuteResult;
+		} catch (error) {
+			console.error(`[bkash][${path}]`, paymentID, error);
+		}
+	}
+
+	return null;
+};
 
 export const getBkashIdToken = async () => {
 	try {

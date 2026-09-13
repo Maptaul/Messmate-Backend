@@ -527,7 +527,7 @@ against the production database after any schema change.
 
 ## Postman
 
-`postman/MessMate.postman_collection.json` — **103 requests across 16 folders**.
+`postman/MessMate.postman_collection.json` — **103 requests across 18 folders**.
 `baseUrl` already points at the live API, so importing and running it needs no
 edits.
 
@@ -537,6 +537,8 @@ chain themselves through the requests' test scripts.
 The order matters. Cleanup runs **Reopen → Remove member → Close → Delete mess**
 because two rules pull in opposite directions: a member cannot be released while
 they owe money, and a mess cannot be deleted while a cycle is still OPEN.
+
+**Cash payments** runs between that re-close and **Teardown**'s final delete, and it has to. Recording a payment makes a month final — reopen is refused once money has landed against it — so any settled payment earlier in the run would stop Cleanup from reopening at all.
 
 Eight requests are marked **Manual step** and cannot be automated — a file has to
 be picked by hand (avatar, receipt), an OTP or refresh token pasted, or the bKash

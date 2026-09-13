@@ -12,7 +12,7 @@ import type {
 } from "../../../generated/prisma/models";
 import config from "../../config";
 import type { IQuery } from "../../interfaces";
-import { getBkashIdToken } from "../../lib/bkash";
+import { executeBkashPayment, getBkashIdToken } from "../../lib/bkash";
 import { prisma } from "../../lib/prisma";
 import type { RequestUser } from "../../middleware/checkAuth";
 import { AppError } from "../../utils/AppError";
@@ -356,21 +356,11 @@ const paymentCallback = async (query: Record<string, unknown>) => {
 		return { redirectUrl: redirectTo("failure") };
 	}
 
-	const executeResponse = await fetch(
-		`${config.bkash_base_url}/tokenized/checkout/execute`,
-		{
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				Accept: "application/json",
-				authorization: bkashIdToken,
-				"x-app-key": config.bkash_app_key,
-			},
-			body: JSON.stringify({ paymentID }),
-		},
-	);
+	const executeResult = await executeBkashPayment(bkashIdToken, paymentID);
 
-	const executeResult: IBkashExecuteResult = await executeResponse.json();
+	if (!executeResult) {
+		return { redirectUrl: redirectTo("failure") };
+	}
 
 	const amount = Number(payment.amount);
 
