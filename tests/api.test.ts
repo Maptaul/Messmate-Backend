@@ -109,6 +109,28 @@ test("recording cash needs a logged-in manager", async () => {
 	assert.equal(res.status, 401);
 });
 
+test("the new mess routes refuse an anonymous caller", async () => {
+	const calls: [string, string][] = [
+		["GET", "/api/v1/cycle/settlement-preview/some-cycle-id"],
+		["PATCH", "/api/v1/meal-plan/set-default-meals"],
+		["GET", "/api/v1/mess/activity-unread/some-mess-id"],
+		["PATCH", "/api/v1/mess/activity-seen/some-mess-id"],
+		["GET", "/api/v1/cron/meal-headcount"],
+		["GET", "/api/v1/finance/categories"],
+		["POST", "/api/v1/finance/add-entry"],
+		["GET", "/api/v1/finance/my-entries"],
+		["GET", "/api/v1/finance/summary"],
+		["PATCH", "/api/v1/finance/update-entry/some-entry-id"],
+		["DELETE", "/api/v1/finance/delete-entry/some-entry-id"],
+	];
+
+	for (const [method, path] of calls) {
+		const res = await api(path, { method });
+
+		assert.equal(res.status, 401, `${method} ${path}`);
+	}
+});
+
 test("the payment result page is public and returns html", async () => {
 	const res = await api("/api/v1/payment/result?status=success");
 	const body = await res.text();

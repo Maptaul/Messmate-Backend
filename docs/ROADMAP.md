@@ -83,7 +83,7 @@ The paper month is now a permanent regression test.
 
 ### 5. Automated tests
 
-`pnpm test` runs 91 checks on Node's own test runner — no framework:
+`pnpm test` runs 121 checks on Node's own test runner — no framework:
 
 - `august-2026-ledger` — the real month, above
 - `bill-breakdown` — the same month with khala, utilities and rent, against the
@@ -94,6 +94,15 @@ The paper month is now a permanent regression test.
 - `email-templates` — renders every email, so a broken template fails the build
   rather than a member's inbox
 - `rolling-advance` — a balance carried across three months
+- `default-meals` — a plan beats a default, and nobody eats before joining or
+  after leaving
+- `activity-feed` — a member's feed scope cannot be widened from the query string
+- `finance-summary` — Saturday-to-Friday weeks across month and year ends, leap
+  Februaries, paisa-exact totals and gap-free breakdowns
+- `finance-rules` — a category only fits its own type; amounts are positive,
+  whole paisa and bounded
+- `bkash-execute` — an unreadable bKash execute answer falls back to the status
+  API instead of crashing the callback
 - `concurrency`, `cycle-warnings`, `meal-validation`, `payment-result`
 
 `pnpm check:settlement` still runs its 20 assertions on the pure function, and
@@ -103,7 +112,7 @@ The integration suite paid for itself immediately: it found that a malformed
 JSON body returned **500**, because `body-parser`'s `SyntaxError` was not on the
 list of known errors. Now it answers 400.
 
-`pnpm test:postman` and `pnpm test:postman:local` drive the 103-request
+`pnpm test:postman` and `pnpm test:postman:local` drive the 125-request
 collection through newman.
 
 ### 6. CI
@@ -332,6 +341,76 @@ The endpoint did not change; the role decides the scope. A manager gets the whol
 mess and can narrow with `?memberId=`. A member gets only rows whose subject is
 their own `MessMember` row, resolved server-side — passing someone else's
 `?memberId=` changes nothing, which was checked live.
+
+### 22. A running bill before the month closes
+
+A member used to see their bill only once the manager closed the month, which is
+when every argument started. `GET /api/v1/cycle/settlement-preview/:cycleId`
+answers "what do I owe so far" at any point. Rather than a second, approximate
+calculation, the ledger read that close-cycle does was pulled out of it into one
+`loadSettlement` function that both call — close inside its transaction, the
+preview outside any — so the two cannot disagree. Checked live: the previewed
+bill and the bill close-cycle then wrote were identical field for field.
+
+### 23. Default meals
+
+Declaring every meal every day is the chore that makes a mess go back to paper.
+`MessMember` gained `defaultLunch` and `defaultDinner` (both `0` by default, so
+nothing changed for anyone who never sets them). A day with no plan counts at
+the default; a plan always wins, 0/0 included. The calendars, the register fill
+and the headcount all read that rule from one function, `defaultMealsFor`, which
+has its own tests for joining and leaving mid-month. The evening reminder simply
+skips anyone who has a default — they are already eating.
+
+The hole this opens is a member lowering their default after a day has locked.
+So a locked day's defaults are frozen into real `MealPlan` rows — by the nightly
+headcount job for tomorrow, and by the default change itself for any already
+locked day it would otherwise rewrite. Checked live: dropping a default from 1/1
+to 0/0 left today at 1/1 and moved only tomorrow.
+
+### 24. Tomorrow's headcount for the manager
+
+`GET /api/v1/cron/meal-headcount`, at 23:05 Dhaka, just past the cutoff: it
+freezes tomorrow's defaults, then emails each manager tomorrow's lunch and
+dinner totals with a member-by-member table. The same numbers are
+`cycle-calendar/:cycleId?date=` for anyone who would rather look than read
+email. The cook still hears it from the manager; texting the cook directly needs
+an SMS gateway and a phone number per mess, which is left for when it is asked
+for.
+
+### 25. An activity feed with unread counts
+
+Deposits and expenses were audited only when deleted, so a member never saw the
+manager record their money or the bazaar they fronted. `AuditAction` gained
+`DEPOSIT_ADDED`, `DEPOSIT_UPDATED`, `EXPENSE_ADDED` and `EXPENSE_UPDATED`, each
+written in the same transaction as the change, with the member it is about as
+the subject — for an expense, the member who paid.
+
+`MessMember.feedSeenAt` makes it a feed rather than a log:
+`GET /api/v1/mess/activity-unread/:messId` counts what arrived in the caller's
+own scope since then, leaving out their own actions, and
+`PATCH /api/v1/mess/activity-seen/:messId` resets it. A member's scope did not
+widen: an expense nobody fronted still reaches only the manager's view.
+
+### 26. A personal income and expense tracker
+
+A mess only covers part of a student's money. `/api/v1/finance` lets any user
+keep their own income and spending and read it back by day, week, month or
+year. It is deliberately separate: entries belong to the `User`, not a
+membership, and paying a mess bill does not write into it.
+
+Four decisions were settled up front. Categories are a fixed list per type, so
+a report never splits "food" from "Food". A week runs Saturday to Friday, as it
+does in Bangladesh. There are no wallets or accounts — only income and expense.
+And the tracker is private to the point that another user's entry is a `404`,
+not a `403`, so not even its existence leaks.
+
+The summary is one `groupBy` over date, type and category, handed to a pure
+`buildSummary` that adds in paisa and fills every day or month in the period,
+empty ones as zero, so a chart has no gaps. Checked live: entries today,
+yesterday and last month moved each period by exactly the right amount, the
+week began on Saturday the 12th, a manager got `404` on a member's entry, and a
+deleted entry left every summary.
 
 ---
 

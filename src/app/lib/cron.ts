@@ -24,6 +24,12 @@ export const startMessMateCrons = () => {
 	);
 
 	cron.schedule(
+		"5 23 * * *",
+		() => run("meal-headcount", () => CronServices.sendMealHeadcounts(false)),
+		{ timezone: DHAKA_TIMEZONE },
+	);
+
+	cron.schedule(
 		"0 10 * * 1",
 		() =>
 			run("unpaid-bill-reminder", () =>
@@ -33,6 +39,6 @@ export const startMessMateCrons = () => {
 	);
 
 	console.log(
-		`Cron: schedules started (${DHAKA_TIMEZONE}) - meal-plan-reminder 22:00 daily, unpaid-bill-reminder 10:00 Mondays`,
+		`Cron: schedules started (${DHAKA_TIMEZONE}) - meal-plan-reminder 22:00 daily, meal-headcount 23:05 daily, unpaid-bill-reminder 10:00 Mondays`,
 	);
 };

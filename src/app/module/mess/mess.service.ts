@@ -262,11 +262,23 @@ const deleteMess = async (messId: string, user: RequestUser) => {
 	});
 };
 
-const getMessAuditLogs = async (
+// A member only ever sees rows about themselves, whatever the query asks for.
+export const feedScope = (
 	messId: string,
-	query: IQuery,
-	user: RequestUser,
-) => {
+	role: Role,
+	membershipId: string | undefined,
+	requestedMemberId?: string,
+): AuditLogWhereInput[] => {
+	if (role === Role.MEMBER) {
+		return [{ messId }, { subjectMemberId: membershipId ?? "" }];
+	}
+
+	return requestedMemberId
+		? [{ messId }, { subjectMemberId: requestedMemberId }]
+		: [{ messId }];
+};
+
+const loadMessMembership = async (messId: string, user: RequestUser) => {
 	const mess = await prisma.mess.findFirst({
 		where: { id: messId, isDeleted: false },
 		select: { id: true },
@@ -276,7 +288,15 @@ const getMessAuditLogs = async (
 		throw new AppError(httpStatus.NOT_FOUND, "Mess Not Found");
 	}
 
-	const membership = await checkMessAccess(messId, user);
+	return checkMessAccess(messId, user);
+};
+
+const getMessAuditLogs = async (
+	messId: string,
+	query: IQuery,
+	user: RequestUser,
+) => {
+	const membership = await loadMessMembership(messId, user);
 
 	const rawLimit = Math.floor(Number(query.limit)) || 10;
 	const limit = Math.min(Math.max(rawLimit, 1), 100);
@@ -284,13 +304,12 @@ const getMessAuditLogs = async (
 	const skip = (page - 1) * limit;
 	const sortOrder = query.sortOrder === "asc" ? "asc" : "desc";
 
-	const andConditions: AuditLogWhereInput[] = [{ messId }];
-
-	if (user.role === Role.MEMBER) {
-		andConditions.push({ subjectMemberId: membership?.id ?? "" });
-	} else if (query.memberId) {
-		andConditions.push({ subjectMemberId: query.memberId });
-	}
+	const andConditions = feedScope(
+		messId,
+		user.role,
+		membership?.id,
+		query.memberId,
+	);
 
 	if (query.action) {
 		andConditions.push({ action: query.action as AuditAction });
@@ -335,12 +354,63 @@ const getMessAuditLogs = async (
 	};
 };
 
+const requireFeedMember = async (messId: string, user: RequestUser) => {
+	const membership = await loadMessMembership(messId, user);
+
+	if (!membership) {
+		throw new AppError(
+			httpStatus.BAD_REQUEST,
+			"Only A Mess Member Has An Activity Feed",
+		);
+	}
+
+	return membership;
+};
+
+const getUnreadActivity = async (messId: string, user: RequestUser) => {
+	const membership = await requireFeedMember(messId, user);
+
+	const member = await prisma.messMember.findUnique({
+		where: { id: membership.id },
+		select: { feedSeenAt: true },
+	});
+
+	const lastSeenAt = member?.feedSeenAt ?? null;
+
+	const unread = await prisma.auditLog.count({
+		where: {
+			AND: [
+				...feedScope(messId, user.role, membership.id),
+
+				{ actorId: { not: user.userId } },
+				...(lastSeenAt ? [{ createdAt: { gt: lastSeenAt } }] : []),
+			],
+		},
+	});
+
+	return { unread, lastSeenAt };
+};
+
+const markActivitySeen = async (messId: string, user: RequestUser) => {
+	const membership = await requireFeedMember(messId, user);
+
+	const member = await prisma.messMember.update({
+		where: { id: membership.id },
+		data: { feedSeenAt: new Date() },
+		select: { feedSeenAt: true },
+	});
+
+	return { unread: 0, lastSeenAt: member.feedSeenAt };
+};
+
 export const MessServices = {
 	createMess,
 	getAllMesses,
 	getMyMesses,
 	getSingleMess,
 	getMessAuditLogs,
+	getUnreadActivity,
+	markActivitySeen,
 	updateMess,
 	deleteMess,
 };

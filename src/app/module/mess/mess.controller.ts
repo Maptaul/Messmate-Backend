@@ -77,6 +77,34 @@ const getMessAuditLogs = catchAsync(async (req: Request, res: Response) => {
 	});
 });
 
+const getUnreadActivity = catchAsync(async (req: Request, res: Response) => {
+	const messId = req.params.messId as string;
+	const user = req.user!;
+
+	const result = await MessServices.getUnreadActivity(messId, user);
+
+	sendResponse(res, {
+		statusCode: httpStatus.OK,
+		success: true,
+		message: "Unread Activity Retrieved Successfully",
+		data: result,
+	});
+});
+
+const markActivitySeen = catchAsync(async (req: Request, res: Response) => {
+	const messId = req.params.messId as string;
+	const user = req.user!;
+
+	const result = await MessServices.markActivitySeen(messId, user);
+
+	sendResponse(res, {
+		statusCode: httpStatus.OK,
+		success: true,
+		message: "Activity Marked As Seen",
+		data: result,
+	});
+});
+
 const updateMess = catchAsync(async (req: Request, res: Response) => {
 	const messId = req.params.messId as string;
 	const payload = req.body;
@@ -112,6 +140,8 @@ export const MessController = {
 	getMyMesses,
 	getSingleMess,
 	getMessAuditLogs,
+	getUnreadActivity,
+	markActivitySeen,
 	updateMess,
 	deleteMess,
 };

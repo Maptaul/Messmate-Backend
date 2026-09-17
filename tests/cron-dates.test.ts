@@ -11,6 +11,12 @@ test("the reminder run at 22:00 Dhaka asks about the next day", () => {
 	assert.equal(iso(dhakaDateOnly(runsAt, 1)), "2026-09-11");
 });
 
+test("the headcount run at 23:05 Dhaka counts the next day", () => {
+	const runsAt = new Date("2026-09-10T17:05:00Z");
+
+	assert.equal(iso(dhakaDateOnly(runsAt, 1)), "2026-09-11");
+});
+
 test("late Dhaka evening is still the same Dhaka day, not the next UTC day", () => {
 	const elevenPmDhaka = new Date("2026-09-10T17:30:00Z");
 

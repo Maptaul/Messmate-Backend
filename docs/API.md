@@ -3,7 +3,7 @@
 **Base URL:** `https://messmatebackend.vercel.app`
 **Local:** `http://localhost:5000`
 
-68 endpoints across 13 modules, all versioned under `/api/v1`. The runnable version of this reference is `postman/MessMate.postman_collection.json` — 103
+79 endpoints across 14 modules, all versioned under `/api/v1`. The runnable version of this reference is `postman/MessMate.postman_collection.json` — 125
 requests that chain their own tokens and ids.
 
 ---
@@ -121,7 +121,8 @@ users, `?type=` on expenses, `?memberId=` on meals and deposits, `?action=` and
 | PATCH | `/api/v1/mess/update-mess/:messId` | `ADMIN` `MESS_MANAGER` | yes |  |
 | DELETE | `/api/v1/mess/delete-mess/:messId` | `ADMIN` `MESS_MANAGER` | — |  |
 | GET | `/api/v1/mess/audit-logs/:messId` | `ADMIN` `MESS_MANAGER` `MEMBER` | — | the trail; a member sees only their own |
-
+| GET | `/api/v1/mess/activity-unread/:messId` | `MESS_MANAGER` `MEMBER` | — | rows in your scope since you last looked, excluding your own |
+| PATCH | `/api/v1/mess/activity-seen/:messId` | `MESS_MANAGER` `MEMBER` | — | resets the unread count to now |
 | GET | `/api/v1/mess/:messId` | `ADMIN` `MESS_MANAGER` `MEMBER` | — |  |
 
 ### Member — `/api/v1/member`
@@ -139,6 +140,7 @@ users, `?type=` on expenses, `?memberId=` on meals and deposits, `?action=` and
 | --- | --- | --- | :-: | --- |
 | POST | `/api/v1/cycle/open-cycle` | `ADMIN` `MESS_MANAGER` | yes |  |
 | GET | `/api/v1/cycle/mess-cycles/:messId` | `ADMIN` `MESS_MANAGER` `MEMBER` | — |  |
+| GET | `/api/v1/cycle/settlement-preview/:cycleId` | `ADMIN` `MESS_MANAGER` `MEMBER` | — | the bill if the month closed now; a member gets only their own line |
 | POST | `/api/v1/cycle/close-cycle/:cycleId` | `ADMIN` `MESS_MANAGER` | — |  |
 | POST | `/api/v1/cycle/reopen-cycle/:cycleId` | `ADMIN` | — |  |
 | GET | `/api/v1/cycle/:cycleId` | `ADMIN` `MESS_MANAGER` `MEMBER` | — |  |
@@ -158,8 +160,9 @@ users, `?type=` on expenses, `?memberId=` on meals and deposits, `?action=` and
 | Method | Path | Roles | Validated | Notes |
 | --- | --- | --- | :-: | --- |
 | POST | `/api/v1/meal-plan/set-my-plan` | `ADMIN` `MESS_MANAGER` `MEMBER` | yes |  |
+| PATCH | `/api/v1/meal-plan/set-default-meals` | `ADMIN` `MESS_MANAGER` `MEMBER` | yes | `{ messId, memberId?, lunch, dinner }` |
 | GET | `/api/v1/meal-plan/my-calendar/:cycleId` | `MESS_MANAGER` `MEMBER` | — |  |
-| GET | `/api/v1/meal-plan/cycle-calendar/:cycleId` | `ADMIN` `MESS_MANAGER` `MEMBER` | — |  |
+| GET | `/api/v1/meal-plan/cycle-calendar/:cycleId` | `ADMIN` `MESS_MANAGER` `MEMBER` | — | `?date=` gives one day's headcount |
 | POST | `/api/v1/meal-plan/apply-to-register` | `ADMIN` `MESS_MANAGER` | yes |  |
 
 ### Expense — `/api/v1/expense`
@@ -205,6 +208,17 @@ users, `?type=` on expenses, `?memberId=` on meals and deposits, `?action=` and
 | GET | `/api/v1/payment/my-payments` | `MESS_MANAGER` `MEMBER` | — |  |
 | GET | `/api/v1/payment/:paymentId` | `ADMIN` `MESS_MANAGER` `MEMBER` | — |  |
 
+### Personal finance — `/api/v1/finance`
+
+| Method | Path | Roles | Validated | Notes |
+| --- | --- | --- | :-: | --- |
+| GET | `/api/v1/finance/categories` | `ADMIN` `MESS_MANAGER` `MEMBER` | — | which categories belong to each type |
+| POST | `/api/v1/finance/add-entry` | `ADMIN` `MESS_MANAGER` `MEMBER` | yes | `{ type, category, amount, date?, note? }` |
+| GET | `/api/v1/finance/my-entries` | `ADMIN` `MESS_MANAGER` `MEMBER` | — | `?type= &category= &from= &to= &searchTerm=` |
+| GET | `/api/v1/finance/summary` | `ADMIN` `MESS_MANAGER` `MEMBER` | — | `?period=daily\|weekly\|monthly\|yearly&date=` |
+| PATCH | `/api/v1/finance/update-entry/:entryId` | `ADMIN` `MESS_MANAGER` `MEMBER` | yes | any field |
+| DELETE | `/api/v1/finance/delete-entry/:entryId` | `ADMIN` `MESS_MANAGER` `MEMBER` | — | soft delete |
+
 ### Admin — `/api/v1/admin`
 
 | Method | Path | Roles | Validated | Notes |
@@ -235,6 +249,79 @@ openingBalance + mealCost + sharedCost + rentShare + advanceCharged
 expenses this member paid out of pocket. A member who settles in full opens the
 next month at zero.
 
+### The settlement preview
+
+`GET /api/v1/cycle/settlement-preview/:cycleId` runs the same settlement
+close-cycle runs — same members, meals, expenses, deposits, opening balances and
+advance — on the ledger as it stands, and writes nothing. The response carries
+`isPreview: true`, `asOf`, the running `totalMeals`, `totalGrocery` and
+`mealRate`, and `bills` in exactly the shape close-cycle returns, each with the
+member's `name`.
+
+A member gets only their own line and no warnings; a manager or admin gets every
+line plus the same warnings close-cycle would return. Rent and the advance are
+charged in full, because that is what closing today would charge. On a closed
+cycle it answers `409` — the bills are final by then; read them from
+`/payment/my-bills` or `/payment/cycle-bills/:cycleId`.
+
+### The personal finance tracker
+
+Each user's own income and expenses, unrelated to any mess. Every query is
+scoped to the caller, so another user's entry — for an admin too — answers
+`404 Entry Not Found`, the same as one that never existed.
+
+- `type` is `INCOME` or `EXPENSE`. `category` comes from a fixed list and must
+  belong to the type: income takes `SALARY`, `TUITION`, `FAMILY`, `BUSINESS`,
+  `OTHER`; expense takes `FOOD`, `MESS`, `TRANSPORT`, `EDUCATION`,
+  `MOBILE_INTERNET`, `HEALTH`, `SHOPPING`, `ENTERTAINMENT`, `OTHER`. A mismatch,
+  on add or on update, is `400`.
+- `amount` is positive, at most two decimals and at most 10,000,000.
+- `date` defaults to today in Dhaka; a future date is `400`.
+
+`GET /api/v1/finance/summary` takes `period` (default `monthly`) and `date`
+(default today) and answers for the period containing that date:
+
+```json
+{
+  "period": "weekly",
+  "from": "2026-09-12",
+  "to": "2026-09-18",
+  "income": 5000,
+  "expense": 180.5,
+  "balance": 4819.5,
+  "byCategory": {
+    "income": [{ "category": "TUITION", "total": 5000 }],
+    "expense": [{ "category": "FOOD", "total": 120.5 }, { "category": "TRANSPORT", "total": 60 }]
+  },
+  "breakdown": [
+    { "label": "2026-09-12", "from": "2026-09-12", "to": "2026-09-12", "income": 0, "expense": 0, "balance": 0 }
+  ]
+}
+```
+
+A week runs Saturday to Friday. `breakdown` is empty for a day, seven days for a
+week, one entry per day for a month and twelve months (`label` `2026-09`) for a
+year. Empty buckets are present with zeros, and `byCategory` is largest first.
+Totals are summed in paisa. A bad `period` or `date` is `400`.
+
+### Default meals and the headcount
+
+`PATCH /api/v1/meal-plan/set-default-meals` takes `{ messId, memberId?, lunch,
+dinner }` in half-meal steps. A member sets only their own; a manager may name
+anyone in the mess.
+
+On any day a member has no plan, their default counts. A plan always wins, and a
+plan of 0/0 is how one day is switched off. `my-calendar` returns
+`defaultMeals` and marks each day `isDefault`; `cycle-calendar` marks each member
+row `isDefault`, and with `?date=` it is that day's headcount.
+`apply-to-register` copies defaults in along with plans and reports how many it
+took from defaults as `fromDefaults`.
+
+Defaults cannot rewrite a locked day. When a day locks at 11 PM the headcount job
+writes every silent member's default in as a real plan, and changing a default
+after a day has locked first does the same for that member — so a member cannot
+lower their default at midnight and escape a meal that was already cooked.
+
 ### Scheduled jobs — `/api/v1/cron`
 
 Not for people. These are called by Vercel Cron, which sends
@@ -245,10 +332,15 @@ to any of them to see who *would* be emailed without sending anything.
 | Method | Path | Roles | Validated | Notes |
 | --- | --- | --- | :-: | --- |
 | GET | `/api/v1/cron/meal-plan-reminder` | _cron secret_ | — | daily 16:00 UTC (22:00 Dhaka) |
+| GET | `/api/v1/cron/meal-headcount` | _cron secret_ | — | daily 17:05 UTC (23:05 Dhaka) |
 | GET | `/api/v1/cron/unpaid-bill-reminder` | _cron secret_ | — | Mondays 04:00 UTC |
 
 The meal-plan job runs an hour before the 11 PM Dhaka cutoff and emails every
-active member of an open cycle who has not set a plan for tomorrow. The
+active member of an open cycle who has neither a plan nor a default for
+tomorrow. The headcount job runs just after the cutoff: it writes each silent
+member's default in as tomorrow's plan, then emails each manager tomorrow's
+lunch and dinner totals with a member-by-member table, defaults marked. A dry
+run writes no plans. The
 unpaid-bill job emails members whose bill on a closed cycle is still `UNPAID` or
 `PARTIAL` with money owing. It runs weekly rather than daily, so an unpaid bill
 is a nudge instead of a daily nag.
@@ -311,7 +403,7 @@ matching the row we created. It runs behind a conditional update, so a refreshed
 - **Soft deletes.** Nothing is removed from the database. `DELETE` endpoints set
   `isDeleted` and `deletedAt`, and every read filters them out.
 - **Audit log.** Cycle closed and reopened, member removed, expense and deposit
-  deleted, payment settled, role changed, user blocked and unblocked, and every
+  added, changed or deleted, payment settled, role changed, user blocked and unblocked, and every
   meal recorded, changed or deleted — each with the actor and the before/after
   state. Meals are on that list because a meal is money: the manager may write
   anyone's row, with no cutoff, but never anonymously.
@@ -330,11 +422,17 @@ matching the row we created. It runs behind a conditional update, so a refreshed
   `checkMessAccess` — passing `?memberId=` someone else changes nothing.
 
   Every mess-scoped row carries `messId`, and rows about one person also carry
-  `subjectMemberId`: meals recorded, changed and deleted, a deposit deleted, a
-  payment settled, a member removed. Closing or reopening a cycle touches
+  `subjectMemberId`: meals recorded, changed and deleted, a deposit added,
+  changed or deleted, an expense added or changed by the member who paid for it,
+  a payment settled, a member removed. Closing or reopening a cycle touches
   everybody, so it carries no subject and a member does not see it. Platform
   actions — role changes, blocks — carry no `messId` at all and stay on the admin
   view alone. All of them take `?action=`, `?entity=` and `?actorId=`.
+
+  `GET /api/v1/mess/activity-unread/:messId` counts rows in that same scope
+  created after the caller's `feedSeenAt`, leaving out rows the caller wrote
+  themselves; `PATCH /api/v1/mess/activity-seen/:messId` sets `feedSeenAt` to
+  now. Both need a membership in the mess, so an admin gets a `403`.
 - **Two-layer authorization.** `auth(...)` proves the account type;
   `checkMessAccess` proves the mess is the caller's. Both are required on any
   route that takes a `messId` or a `cycleId`.

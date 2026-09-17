@@ -51,6 +51,20 @@ const getSingleCycle = catchAsync(async (req: Request, res: Response) => {
 	});
 });
 
+const previewSettlement = catchAsync(async (req: Request, res: Response) => {
+	const cycleId = req.params.cycleId as string;
+	const user = req.user!;
+
+	const result = await CycleServices.previewSettlement(cycleId, user);
+
+	sendResponse(res, {
+		statusCode: httpStatus.OK,
+		success: true,
+		message: "Settlement Preview Retrieved Successfully",
+		data: result,
+	});
+});
+
 const closeCycle = catchAsync(async (req: Request, res: Response) => {
 	const cycleId = req.params.cycleId as string;
 	const user = req.user!;
@@ -83,6 +97,7 @@ export const CycleController = {
 	openCycle,
 	getMessCycles,
 	getSingleCycle,
+	previewSettlement,
 	closeCycle,
 	reopenCycle,
 };

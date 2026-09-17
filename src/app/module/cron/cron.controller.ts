@@ -17,6 +17,17 @@ const mealPlanReminder = catchAsync(async (req: Request, res: Response) => {
 	});
 });
 
+const mealHeadcount = catchAsync(async (req: Request, res: Response) => {
+	const result = await CronServices.sendMealHeadcounts(isDryRun(req));
+
+	sendResponse(res, {
+		statusCode: httpStatus.OK,
+		success: true,
+		message: "Meal Headcounts Processed",
+		data: result,
+	});
+});
+
 const unpaidBillReminder = catchAsync(async (req: Request, res: Response) => {
 	const result = await CronServices.sendUnpaidBillReminders(isDryRun(req));
 
@@ -30,5 +41,6 @@ const unpaidBillReminder = catchAsync(async (req: Request, res: Response) => {
 
 export const CronController = {
 	mealPlanReminder,
+	mealHeadcount,
 	unpaidBillReminder,
 };

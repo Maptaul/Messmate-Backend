@@ -8,6 +8,10 @@ import { sendTemplateMail } from "../../lib/mail";
 import { prisma } from "../../lib/prisma";
 import { mapWithLimit } from "../../utils/concurrency";
 import { monthName, taka } from "../../utils/months";
+import {
+	buildPlanDays,
+	lockInDefaultMeals,
+} from "../mealPlan/mealPlan.service";
 
 const DHAKA_UTC_OFFSET_HOURS = 6;
 
@@ -90,6 +94,9 @@ const sendMealPlanReminders = async (dryRun: boolean) => {
 				status: MemberStatus.ACTIVE,
 				isDeleted: false,
 				mealPlans: { none: { date: tomorrow } },
+
+				defaultLunch: 0,
+				defaultDinner: 0,
 			},
 			select: { user: { select: { name: true, email: true } } },
 		});
@@ -107,6 +114,64 @@ const sendMealPlanReminders = async (dryRun: boolean) => {
 				},
 			});
 		}
+	}
+
+	const result = await deliver(recipients, dryRun);
+
+	return { planDate: tomorrow.toISOString().slice(0, 10), ...result };
+};
+
+// Runs just after the 23:00 cutoff: tomorrow is locked, so defaults are
+// written in as real plans and the manager gets the final count to shop for.
+const sendMealHeadcounts = async (dryRun: boolean) => {
+	const tomorrow = dhakaDateOnly(new Date(), 1);
+
+	const openCycles = await prisma.billingCycle.findMany({
+		where: {
+			status: CycleStatus.OPEN,
+			year: tomorrow.getUTCFullYear(),
+			month: tomorrow.getUTCMonth() + 1,
+		},
+		select: {
+			id: true,
+			messId: true,
+			year: true,
+			month: true,
+			mess: {
+				select: {
+					name: true,
+					manager: { select: { name: true, email: true } },
+				},
+			},
+		},
+	});
+
+	const recipients: Recipient[] = [];
+
+	for (const cycle of openCycles) {
+		if (!dryRun) {
+			await lockInDefaultMeals(cycle, tomorrow);
+		}
+
+		const [day] = await buildPlanDays(cycle, tomorrow);
+
+		if (!day) {
+			continue;
+		}
+
+		recipients.push({
+			email: cycle.mess.manager.email,
+			subject: `Tomorrow At ${cycle.mess.name}: ${day.lunch} Lunch, ${day.dinner} Dinner`,
+			template: "meal-headcount",
+			data: {
+				userName: cycle.mess.manager.name,
+				messName: cycle.mess.name,
+				planDate: day.date,
+				lunch: day.lunch,
+				dinner: day.dinner,
+				members: day.members,
+			},
+		});
 	}
 
 	const result = await deliver(recipients, dryRun);
@@ -154,5 +219,6 @@ const sendUnpaidBillReminders = async (dryRun: boolean) => {
 
 export const CronServices = {
 	sendMealPlanReminders,
+	sendMealHeadcounts,
 	sendUnpaidBillReminders,
 };

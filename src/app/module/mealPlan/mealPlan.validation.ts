@@ -22,6 +22,14 @@ const SetMealPlanValidationZodSchema = z.object({
 		.max(31, "A Plan Cannot Cover More Than 31 Days"),
 });
 
+const SetDefaultMealsValidationZodSchema = z.object({
+	messId: z.string().min(1, "Mess Id Is Required"),
+
+	memberId: z.string().optional(),
+	lunch: mealCountSchema,
+	dinner: mealCountSchema,
+});
+
 const ApplyPlanValidationZodSchema = z.object({
 	cycleId: z.string().min(1, "Cycle Id Is Required"),
 	date: z.coerce.date("A Valid Date Is Required"),
@@ -29,5 +37,6 @@ const ApplyPlanValidationZodSchema = z.object({
 
 export const MealPlanValidation = {
 	SetMealPlanValidationZodSchema,
+	SetDefaultMealsValidationZodSchema,
 	ApplyPlanValidationZodSchema,
 };

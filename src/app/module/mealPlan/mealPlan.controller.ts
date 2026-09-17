@@ -18,6 +18,20 @@ const setMealPlan = catchAsync(async (req: Request, res: Response) => {
 	});
 });
 
+const setDefaultMeals = catchAsync(async (req: Request, res: Response) => {
+	const payload = req.body;
+	const user = req.user!;
+
+	const result = await MealPlanServices.setDefaultMeals(payload, user);
+
+	sendResponse(res, {
+		statusCode: httpStatus.OK,
+		success: true,
+		message: "Default Meals Saved Successfully",
+		data: result,
+	});
+});
+
 const getMyCalendar = catchAsync(async (req: Request, res: Response) => {
 	const cycleId = req.params.cycleId as string;
 	const user = req.user!;
@@ -66,6 +80,7 @@ const applyPlanToRegister = catchAsync(async (req: Request, res: Response) => {
 
 export const MealPlanController = {
 	setMealPlan,
+	setDefaultMeals,
 	getMyCalendar,
 	getCycleCalendar,
 	applyPlanToRegister,

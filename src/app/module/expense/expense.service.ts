@@ -111,20 +111,38 @@ const addExpense = async (
 
 	const upload = receipt ? await uploadToCloudinary(receipt, "receipts") : null;
 
-	return prisma.expense.create({
-		data: {
-			cycleId: cycle.id,
-			type: payload.type,
-			amount: payload.amount,
-			splitMethod: payload.splitMethod ?? "EQUAL",
-			paidByMemberId: payload.paidByMemberId ?? null,
-			description: payload.description ?? null,
-			spentAt,
-			receiptUrl: upload?.secure_url ?? null,
-			receiptPublicId: upload?.public_id ?? null,
-			createdById: user.userId,
-		},
-		select: expenseSelect,
+	return prisma.$transaction(async (tx) => {
+		const expense = await tx.expense.create({
+			data: {
+				cycleId: cycle.id,
+				type: payload.type,
+				amount: payload.amount,
+				splitMethod: payload.splitMethod ?? "EQUAL",
+				paidByMemberId: payload.paidByMemberId ?? null,
+				description: payload.description ?? null,
+				spentAt,
+				receiptUrl: upload?.secure_url ?? null,
+				receiptPublicId: upload?.public_id ?? null,
+				createdById: user.userId,
+			},
+			select: expenseSelect,
+		});
+
+		await writeAudit(tx, {
+			actorId: user.userId,
+			action: AuditAction.EXPENSE_ADDED,
+			messId: cycle.messId,
+			subjectMemberId: payload.paidByMemberId ?? null,
+			entity: "Expense",
+			entityId: expense.id,
+			after: {
+				type: expense.type,
+				amount: Number(expense.amount),
+				description: expense.description,
+			},
+		});
+
+		return expense;
 	});
 };
 
@@ -282,6 +300,10 @@ const updateExpense = async (
 		select: {
 			id: true,
 			cycleId: true,
+			type: true,
+			amount: true,
+			description: true,
+			paidByMemberId: true,
 			receiptPublicId: true,
 			cycle: { select: { year: true, month: true } },
 		},
@@ -326,20 +348,43 @@ const updateExpense = async (
 
 	const upload = receipt ? await uploadToCloudinary(receipt, "receipts") : null;
 
-	const updated = await prisma.expense.update({
-		where: { id: expenseId },
-		data: {
-			type: payload.type,
-			amount: payload.amount,
-			splitMethod: payload.splitMethod,
-			paidByMemberId: payload.paidByMemberId,
-			description: payload.description,
-			spentAt,
-			...(upload
-				? { receiptUrl: upload.secure_url, receiptPublicId: upload.public_id }
-				: {}),
-		},
-		select: expenseSelect,
+	const updated = await prisma.$transaction(async (tx) => {
+		const row = await tx.expense.update({
+			where: { id: expenseId },
+			data: {
+				type: payload.type,
+				amount: payload.amount,
+				splitMethod: payload.splitMethod,
+				paidByMemberId: payload.paidByMemberId,
+				description: payload.description,
+				spentAt,
+				...(upload
+					? { receiptUrl: upload.secure_url, receiptPublicId: upload.public_id }
+					: {}),
+			},
+			select: expenseSelect,
+		});
+
+		await writeAudit(tx, {
+			actorId: user.userId,
+			action: AuditAction.EXPENSE_UPDATED,
+			messId: cycle.messId,
+			subjectMemberId: row.paidByMember?.id ?? expense.paidByMemberId,
+			entity: "Expense",
+			entityId: expenseId,
+			before: {
+				type: expense.type,
+				amount: Number(expense.amount),
+				description: expense.description,
+			},
+			after: {
+				type: row.type,
+				amount: Number(row.amount),
+				description: row.description,
+			},
+		});
+
+		return row;
 	});
 
 	if (upload && expense.receiptPublicId) {

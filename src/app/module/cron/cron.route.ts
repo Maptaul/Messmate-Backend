@@ -6,6 +6,8 @@ const router = Router();
 
 router.get("/meal-plan-reminder", cronAuth, CronController.mealPlanReminder);
 
+router.get("/meal-headcount", cronAuth, CronController.mealHeadcount);
+
 router.get(
 	"/unpaid-bill-reminder",
 	cronAuth,

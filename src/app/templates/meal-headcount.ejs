@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Meals for tomorrow</title>
+  <style>
+    body { margin: 0; padding: 0; background: #f4f8fb; color: #263746; font-family: Arial, sans-serif; }
+    .wrapper { width: 100%; padding: 32px 0; }
+    .card { width: 92%; max-width: 600px; margin: 0 auto; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 18px rgba(25, 65, 90, .08); }
+    .header { padding: 28px 36px; background: #087f8c; color: #fff; }
+    .brand { margin: 0; font-size: 24px; font-weight: bold; }
+    .content { padding: 36px; line-height: 1.6; }
+    h1 { margin: 0 0 16px; color: #123c4a; font-size: 26px; }
+    p { margin: 0 0 18px; }
+    .totals { display: flex; gap: 12px; margin: 0 0 22px; }
+    .total { flex: 1; padding: 14px 16px; border-radius: 8px; background: #eef7f8; color: #0a5b64; }
+    .total strong { display: block; font-size: 28px; }
+    table { width: 100%; border-collapse: collapse; margin: 0 0 22px; font-size: 14px; }
+    th, td { padding: 9px 8px; border-bottom: 1px solid #e3ecef; text-align: left; }
+    th { color: #5b6b75; font-weight: normal; }
+    td.num, th.num { text-align: right; }
+    .tag { color: #71808a; font-size: 12px; }
+    .footer { padding: 22px 36px; background: #f7fafb; color: #71808a; font-size: 13px; }
+    @media screen and (max-width: 480px) { .content, .header, .footer { padding: 26px 22px; } h1 { font-size: 22px; } }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <div class="card">
+      <header class="header">
+        <p class="brand">MessMate</p>
+      </header>
+      <main class="content">
+        <h1>Meals for <%= planDate %></h1>
+        <p>Hi <%= userName || 'there' %>, plans for <strong><%= messName %></strong> closed at 11:00 PM. This is the final count to shop and cook for.</p>
+        <div class="totals">
+          <div class="total">Lunch<strong><%= lunch %></strong></div>
+          <div class="total">Dinner<strong><%= dinner %></strong></div>
+        </div>
+        <table>
+          <thead>
+            <tr><th>Member</th><th class="num">Lunch</th><th class="num">Dinner</th></tr>
+          </thead>
+          <tbody>
+            <% members.forEach(function (member) { %>
+              <tr>
+                <td><%= member.name %><% if (member.isDefault) { %> <span class="tag">(default)</span><% } %></td>
+                <td class="num"><%= member.lunch %></td>
+                <td class="num"><%= member.dinner %></td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+        <p>Members marked default did not set a plan, so their usual meals were counted.</p>
+        <p>Warm regards,<br><strong>The MessMate Team</strong></p>
+      </main>
+      <footer class="footer">
+        <p>This is an automated message. Please do not reply to this email.</p>
+        <p>&copy; <%= new Date().getFullYear() %> MessMate. All rights reserved.</p>
+      </footer>
+    </div>
+  </div>
+</body>
+</html>

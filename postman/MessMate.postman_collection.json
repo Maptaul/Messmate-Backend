@@ -160,6 +160,14 @@
       "key": "managerMemberId",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "financeEntryId",
+      "value": ""
+    },
+    {
+      "key": "financeIncomeId",
+      "value": ""
     }
   ],
   "item": [
@@ -936,7 +944,7 @@
                 }
               ]
             },
-            "description": "Everything that moved money or membership in this mess, newest first: cycle closed and reopened, every meal recorded, changed or deleted, deposits and expenses deleted, payments settled, members removed. Each row names the actor and, where it is about one person, the subject. A manager sees the whole mess and can narrow with ?memberId=. Platform actions such as a role change carry no messId and never appear here."
+            "description": "Everything that moved money or membership in this mess, newest first: cycle closed and reopened, every meal recorded, changed or deleted, deposits and expenses added, changed or deleted, payments settled, members removed. Each row names the actor and, where it is about one person, the subject. A manager sees the whole mess and can narrow with ?memberId=. Platform actions such as a role change carry no messId and never appear here."
           }
         }
       ]
@@ -1199,6 +1207,94 @@
               ]
             },
             "description": "Includes a live summary: running meal count, grocery total and meal rate while the cycle is still OPEN."
+          }
+        },
+        {
+          "name": "Settlement preview (Manager) - the bills if the month closed now",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('the manager sees every line of the would-be bill', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  const data = pm.response.json().data;",
+                  "  pm.expect(data.isPreview).to.be.true;",
+                  "  pm.expect(data.bills).to.be.an('array').that.is.not.empty;",
+                  "  data.bills.forEach(function (bill) {",
+                  "    pm.expect(bill).to.have.property('name');",
+                  "    pm.expect(bill).to.have.property('dueAmount');",
+                  "  });",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/cycle/settlement-preview/{{cycleId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "cycle",
+                "settlement-preview",
+                "{{cycleId}}"
+              ]
+            },
+            "description": "Runs the exact settlement close-cycle runs, on the ledger as it stands, and writes nothing. Every member's line with their name, the running meal rate and any warnings. Numbers move as meals, bazaar and deposits come in; closing the cycle makes them final. 409 once the cycle is closed."
+          }
+        },
+        {
+          "name": "Settlement preview (Member) - only their own line",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('a member sees only themselves', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  const bills = pm.response.json().data.bills;",
+                  "  pm.expect(bills).to.have.lengthOf(1);",
+                  "  pm.expect(bills[0].memberId).to.eql(pm.variables.get('memberId'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{memberToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/cycle/settlement-preview/{{cycleId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "cycle",
+                "settlement-preview",
+                "{{cycleId}}"
+              ]
+            },
+            "description": "\"What do I owe so far?\" A member gets the mess-wide meal rate and their own line only, never anyone else's."
           }
         },
         {
@@ -1623,6 +1719,101 @@
           }
         },
         {
+          "name": "Set my default meals (Member) - auto meals",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('the default is saved', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  const data = pm.response.json().data;",
+                  "  pm.expect(data.defaultLunch).to.eql(1);",
+                  "  pm.expect(data.defaultDinner).to.eql(1);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{memberToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"messId\": \"{{messId}}\",\n  \"lunch\": 1,\n  \"dinner\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/meal-plan/set-default-meals",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "meal-plan",
+                "set-default-meals"
+              ]
+            },
+            "description": "The meals a member eats on any day they do not plan. A plan for a day always wins, 0/0 included - that is how a member switches one day off. Defaults are written in as real plans once a day locks at 11 PM, so changing the default later never rewrites a day the manager already shopped for. A manager may pass `memberId` to set it for someone else."
+          }
+        },
+        {
+          "name": "403 - member sets someone else's default",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('refused', function () {",
+                  "  pm.response.to.have.status(403);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{memberToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"messId\": \"{{messId}}\",\n  \"memberId\": \"{{managerMemberId}}\",\n  \"lunch\": 0,\n  \"dinner\": 0\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/meal-plan/set-default-meals",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "meal-plan",
+                "set-default-meals"
+              ]
+            },
+            "description": "A member can only change their own default."
+          }
+        },
+        {
           "name": "Get my calendar",
           "request": {
             "method": "GET",
@@ -1672,6 +1863,56 @@
               ]
             },
             "description": "Open to the whole mess, not just the manager: whoever is on grocery duty needs the day's headcount to shop correctly."
+          }
+        },
+        {
+          "name": "Headcount for one day (Manager)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('each member row says whether it came from a default', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  (pm.response.json().data.days || []).forEach(function (day) {",
+                  "    day.members.forEach(function (row) {",
+                  "      pm.expect(row.isDefault).to.be.a('boolean');",
+                  "    });",
+                  "  });",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/meal-plan/cycle-calendar/{{cycleId}}?date={{planDate1}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "meal-plan",
+                "cycle-calendar",
+                "{{cycleId}}"
+              ],
+              "query": [
+                {
+                  "key": "date",
+                  "value": "{{planDate1}}"
+                }
+              ]
+            },
+            "description": "Total lunch and dinner for one date and who is eating. Members who set no plan are counted at their default and marked `isDefault: true`. The same count is mailed to the manager every night at 23:05 Dhaka."
           }
         },
         {
@@ -2264,6 +2505,88 @@
             },
             "description": "Audited as DEPOSIT_DELETED - removing it takes credit away from whoever it belonged to."
           }
+        },
+        {
+          "name": "Unread activity (Member)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('an unread count comes back', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().data.unread).to.be.a('number');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{memberToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/mess/activity-unread/{{messId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "mess",
+                "activity-unread",
+                "{{messId}}"
+              ]
+            },
+            "description": "How many rows of the member's own activity feed arrived since they last looked, not counting what they did themselves. Deposits and expenses added or changed now land in the feed alongside meals, payments and deletions."
+          }
+        },
+        {
+          "name": "Mark activity seen (Member)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('the count resets', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  const data = pm.response.json().data;",
+                  "  pm.expect(data.unread).to.eql(0);",
+                  "  pm.expect(data.lastSeenAt).to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{memberToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/mess/activity-seen/{{messId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "mess",
+                "activity-seen",
+                "{{messId}}"
+              ]
+            },
+            "description": "Call when the member opens the feed. The unread count starts again from now."
+          }
         }
       ]
     },
@@ -2600,6 +2923,672 @@
               ]
             },
             "description": "A well-formed id that belongs to nothing."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Personal finance",
+      "description": "A private income and expense tracker for any logged-in user, separate from the mess. Nobody else can read or change another person's entries - an admin included; someone else's entry answers 404 exactly like a missing one. Categories are a fixed list per type, entries cannot be dated in the future, and a week runs Saturday to Friday.",
+      "item": [
+        {
+          "name": "Finance categories",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('categories are split by type', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  const d = pm.response.json().data;",
+                  "  pm.expect(d.INCOME).to.include('TUITION');",
+                  "  pm.expect(d.EXPENSE).to.include('FOOD');",
+                  "  pm.expect(d.INCOME).to.not.include('FOOD');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{memberToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/finance/categories",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "finance",
+                "categories"
+              ]
+            },
+            "description": "Which categories belong to INCOME and which to EXPENSE. OTHER is on both sides."
+          }
+        },
+        {
+          "name": "Add income (Member) - dated today by default",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('income recorded', function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "const res = pm.response.json();",
+                  "if (res?.data?.id) { pm.collectionVariables.set('financeIncomeId', res.data.id); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{memberToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"INCOME\",\n  \"category\": \"TUITION\",\n  \"amount\": 5000,\n  \"note\": \"September tuition\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/finance/add-entry",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "finance",
+                "add-entry"
+              ]
+            },
+            "description": "`date` is optional and defaults to today in Dhaka. `amount` allows two decimals."
+          }
+        },
+        {
+          "name": "Add expense (Member)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('expense recorded', function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "const res = pm.response.json();",
+                  "if (res?.data?.id) { pm.collectionVariables.set('financeEntryId', res.data.id); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{memberToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"EXPENSE\",\n  \"category\": \"FOOD\",\n  \"amount\": 120.5,\n  \"note\": \"Lunch outside\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/finance/add-entry",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "finance",
+                "add-entry"
+              ]
+            },
+            "description": "An expense for today."
+          }
+        },
+        {
+          "name": "400 - a category that does not fit the type",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('refused', function () {",
+                  "  pm.response.to.have.status(400);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{memberToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"INCOME\",\n  \"category\": \"FOOD\",\n  \"amount\": 100\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/finance/add-entry",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "finance",
+                "add-entry"
+              ]
+            },
+            "description": "FOOD is an expense category, so an income cannot use it."
+          }
+        },
+        {
+          "name": "400 - an entry dated in the future",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('refused', function () {",
+                  "  pm.response.to.have.status(400);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{memberToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"EXPENSE\",\n  \"category\": \"FOOD\",\n  \"amount\": 100,\n  \"date\": \"2099-01-01\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/finance/add-entry",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "finance",
+                "add-entry"
+              ]
+            },
+            "description": "An entry records money that already moved."
+          }
+        },
+        {
+          "name": "My entries - filter by type (Member)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('only the caller\\'s expenses come back', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.response.json().data.forEach(function (entry) {",
+                  "    pm.expect(entry.type).to.eql('EXPENSE');",
+                  "  });",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{memberToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/finance/my-entries?type=EXPENSE&page=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "finance",
+                "my-entries"
+              ],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "EXPENSE"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Also takes `category`, `from`, `to` (YYYY-MM-DD), `searchTerm` on the note, `sortOrder`. Newest date first."
+          }
+        },
+        {
+          "name": "Update entry (Member)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('updated', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('the new amount is stored', function () {",
+                  "  pm.expect(Number(pm.response.json().data.amount)).to.eql(150);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{memberToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 150,\n  \"category\": \"SHOPPING\",\n  \"note\": \"It was shopping after all\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/finance/update-entry/{{financeEntryId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "finance",
+                "update-entry",
+                "{{financeEntryId}}"
+              ]
+            },
+            "description": "Any field can change. The category must still fit the entry's type after the change."
+          }
+        },
+        {
+          "name": "Summary - daily",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('balance is income minus expense', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  const d = pm.response.json().data;",
+                  "  pm.expect(Math.round((d.income - d.expense) * 100) / 100).to.eql(d.balance);",
+                  "});",
+                  "pm.test('a day has no breakdown', function () {",
+                  "  pm.expect(pm.response.json().data.breakdown).to.have.lengthOf(0);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{memberToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/finance/summary?period=daily",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "finance",
+                "summary"
+              ],
+              "query": [
+                {
+                  "key": "period",
+                  "value": "daily"
+                }
+              ]
+            },
+            "description": "Income, expense, balance and per-category totals for one day. `date=YYYY-MM-DD` picks the day; today in Dhaka by default."
+          }
+        },
+        {
+          "name": "Summary - weekly (Saturday to Friday)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('balance is income minus expense', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  const d = pm.response.json().data;",
+                  "  pm.expect(Math.round((d.income - d.expense) * 100) / 100).to.eql(d.balance);",
+                  "});",
+                  "pm.test('seven days starting on a Saturday', function () {",
+                  "  const d = pm.response.json().data;",
+                  "  pm.expect(d.breakdown).to.have.lengthOf(7);",
+                  "  pm.expect(new Date(d.from + 'T00:00:00Z').getUTCDay()).to.eql(6);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{memberToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/finance/summary?period=weekly",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "finance",
+                "summary"
+              ],
+              "query": [
+                {
+                  "key": "period",
+                  "value": "weekly"
+                }
+              ]
+            },
+            "description": "The week containing `date`, Saturday to Friday, broken down day by day."
+          }
+        },
+        {
+          "name": "Summary - monthly",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('balance is income minus expense', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  const d = pm.response.json().data;",
+                  "  pm.expect(Math.round((d.income - d.expense) * 100) / 100).to.eql(d.balance);",
+                  "});",
+                  "pm.test('one bucket per day of the month', function () {",
+                  "  const d = pm.response.json().data;",
+                  "  const days = new Date(Date.UTC(Number(d.from.slice(0, 4)), Number(d.from.slice(5, 7)), 0)).getUTCDate();",
+                  "  pm.expect(d.breakdown).to.have.lengthOf(days);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{memberToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/finance/summary?period=monthly",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "finance",
+                "summary"
+              ],
+              "query": [
+                {
+                  "key": "period",
+                  "value": "monthly"
+                }
+              ]
+            },
+            "description": "The month containing `date`, one bucket per day. Empty days are 0, so a chart has no gaps."
+          }
+        },
+        {
+          "name": "Summary - yearly",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('balance is income minus expense', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  const d = pm.response.json().data;",
+                  "  pm.expect(Math.round((d.income - d.expense) * 100) / 100).to.eql(d.balance);",
+                  "});",
+                  "pm.test('twelve months', function () {",
+                  "  pm.expect(pm.response.json().data.breakdown).to.have.lengthOf(12);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{memberToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/finance/summary?period=yearly",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "finance",
+                "summary"
+              ],
+              "query": [
+                {
+                  "key": "period",
+                  "value": "yearly"
+                }
+              ]
+            },
+            "description": "The calendar year containing `date`, one bucket per month."
+          }
+        },
+        {
+          "name": "404 - manager touches a member's entry",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('hidden from everyone else', function () {",
+                  "  pm.response.to.have.status(404);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/finance/update-entry/{{financeEntryId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "finance",
+                "update-entry",
+                "{{financeEntryId}}"
+              ]
+            },
+            "description": "Personal entries are private. Another user's entry is reported as not found, so its existence is not revealed either."
+          }
+        },
+        {
+          "name": "Delete entry (Member)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('deleted', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{memberToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/finance/delete-entry/{{financeEntryId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "finance",
+                "delete-entry",
+                "{{financeEntryId}}"
+              ]
+            },
+            "description": "Soft delete. The entry leaves every list and summary."
+          }
+        },
+        {
+          "name": "Delete income entry (Member) - leaves the demo account clean",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('deleted', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{memberToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/finance/delete-entry/{{financeIncomeId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "finance",
+                "delete-entry",
+                "{{financeIncomeId}}"
+              ]
+            },
+            "description": "Removes the income added above so re-running the collection does not pile up demo data."
           }
         }
       ]
@@ -3380,6 +4369,37 @@
               ]
             },
             "description": "Members of an open cycle with no plan set for tomorrow. Runs for real at 16:00 UTC, an hour before the 11 PM Dhaka cutoff."
+          }
+        },
+        {
+          "name": "Meal headcount (dry run)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{cronSecret}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/cron/meal-headcount?dryRun=true",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "cron",
+                "meal-headcount"
+              ],
+              "query": [
+                {
+                  "key": "dryRun",
+                  "value": "true"
+                }
+              ]
+            },
+            "description": "Tomorrow's lunch and dinner count per open mess, mailed to its manager. Runs for real at 17:05 UTC, just after the 11 PM Dhaka cutoff, and first writes each member's default in as a real plan. A dry run writes nothing and sends nothing."
           }
         },
         {

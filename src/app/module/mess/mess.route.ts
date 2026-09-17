@@ -28,6 +28,18 @@ router.get(
 	MessController.getMessAuditLogs,
 );
 
+router.get(
+	"/activity-unread/:messId",
+	auth(Role.MESS_MANAGER, Role.MEMBER),
+	MessController.getUnreadActivity,
+);
+
+router.patch(
+	"/activity-seen/:messId",
+	auth(Role.MESS_MANAGER, Role.MEMBER),
+	MessController.markActivitySeen,
+);
+
 router.patch(
 	"/update-mess/:messId",
 	auth(Role.ADMIN, Role.MESS_MANAGER),

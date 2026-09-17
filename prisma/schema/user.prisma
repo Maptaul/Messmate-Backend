@@ -27,6 +27,7 @@ model User {
   createdExpenses Expense[]      @relation("ExpenseCreatedBy")
   createdDeposits Deposit[]      @relation("DepositCreatedBy")
   auditLogs       AuditLog[]     @relation("AuditActor")
+  financeEntries  FinanceEntry[]
 
   @@unique([email])
   @@index([role])

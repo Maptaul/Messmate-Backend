@@ -1,6 +1,6 @@
 # MessMate — Entity Relationship Diagram
 
-12 models, one per schema file under `prisma/schema/`, and all 24 of their
+13 models, one per schema file under `prisma/schema/`, and all 25 of their
 relations. The diagram is written by hand, so it can drift from the schema — it
 was last checked foreign key by foreign key: every `@relation` in
 `prisma/schema/` is drawn below, and every line below is a real `@relation`.
@@ -13,6 +13,7 @@ erDiagram
     User |o--o{ BillingCycle : "closed"
     User ||--o{ Deposit : "recorded"
     User ||--o{ Expense : "recorded"
+    User ||--o{ FinanceEntry : "keeps"
 
     Mess ||--o{ MessMember : has
     Mess ||--o{ BillingCycle : "one per month"
@@ -55,6 +56,9 @@ erDiagram
         MemberStatus status
         datetime joinedAt
         datetime leftAt
+        float defaultLunch
+        float defaultDinner
+        datetime feedSeenAt
     }
     BillingCycle {
         string id PK
@@ -123,6 +127,14 @@ erDiagram
         json before
         json after
     }
+    FinanceEntry {
+        string id PK
+        string userId FK
+        FinanceEntryType type
+        FinanceCategory category
+        decimal amount
+        date date
+    }
 ```
 
 Three relationships carry most of the design:
@@ -138,6 +150,10 @@ Three relationships carry most of the design:
   member declared in advance; an entry is what the manager recorded as eaten.
   Only entries are charged. Merging them would let a declaration quietly become
   a charge.
+
+`FinanceEntry` hangs off `User`, not `MessMember`, on purpose: a person's own
+income and spending belong to them, not to whichever mess they live in, and
+survive moving out.
 
 ## The audit trail
 

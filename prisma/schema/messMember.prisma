@@ -5,6 +5,11 @@ model MessMember {
   joinedAt DateTime     @default(now())
   leftAt   DateTime?
 
+  defaultLunch  Float @default(0)
+  defaultDinner Float @default(0)
+
+  feedSeenAt DateTime?
+
   isDeleted Boolean   @default(false)
   deletedAt DateTime?
 

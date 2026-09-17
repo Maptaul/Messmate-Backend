@@ -4,7 +4,9 @@ import { test } from "node:test";
 import { executeBkashPayment } from "../src/app/lib/bkash";
 
 // What the sandbox sent on 2026-09-13: a raw control character inside a string.
-const brokenBody = '{\n  "statusCode": "0000",\n  "statusMessage": "Successful"\n}';
+const CONTROL_CHAR = String.fromCharCode(1);
+
+const brokenBody = `{"statusCode": "0000", "statusMessage": "Succ${CONTROL_CHAR}essful"}`;
 
 const completed = {
 	statusCode: "0000",

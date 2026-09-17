@@ -14,6 +14,13 @@ router.post(
 	MealPlanController.setMealPlan,
 );
 
+router.patch(
+	"/set-default-meals",
+	auth(Role.ADMIN, Role.MESS_MANAGER, Role.MEMBER),
+	validateRequest(MealPlanValidation.SetDefaultMealsValidationZodSchema),
+	MealPlanController.setDefaultMeals,
+);
+
 router.get(
 	"/my-calendar/:cycleId",
 	auth(Role.MESS_MANAGER, Role.MEMBER),

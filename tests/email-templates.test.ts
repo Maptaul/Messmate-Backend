@@ -263,6 +263,26 @@ test("the reminder templates still render", async () => {
 	assert.match(unpaid, /BDT 420\.50/);
 });
 
+test("the headcount tells the manager what to cook and who was a default", async () => {
+	const html = await render("meal-headcount", {
+		userName: "Shuvo",
+		messName: "Chattogram Mess",
+		planDate: "2026-09-18",
+		lunch: 7.5,
+		dinner: 8,
+		members: [
+			{ name: "Tarak", lunch: 1, dinner: 1, isDefault: false },
+			{ name: "Arman", lunch: 0.5, dinner: 1, isDefault: true },
+		],
+	});
+
+	assert.match(html, /Meals for 2026-09-18/);
+	assert.match(html, /Lunch<strong>7.5<\/strong>/);
+	assert.match(html, /Dinner<strong>8<\/strong>/);
+	assert.match(html, /Arman <span class="tag">\(default\)<\/span>/);
+	assert.doesNotMatch(html, /Tarak <span class="tag">/);
+});
+
 test("month numbers become month names", () => {
 	assert.equal(monthName(1), "January");
 	assert.equal(monthName(8), "August");

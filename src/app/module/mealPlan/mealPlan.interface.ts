@@ -11,6 +11,14 @@ export interface ISetMealPlanPayload {
 	days: IPlanDayInput[];
 }
 
+export interface ISetDefaultMealsPayload {
+	messId: string;
+
+	memberId?: string;
+	lunch: number;
+	dinner: number;
+}
+
 export interface IApplyPlanPayload {
 	cycleId: string;
 	date: Date;

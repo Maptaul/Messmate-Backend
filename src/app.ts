@@ -18,6 +18,7 @@ import { CronRoutes } from "./app/module/cron/cron.route";
 import { CycleRoutes } from "./app/module/cycle/cycle.route";
 import { DepositRoutes } from "./app/module/deposit/deposit.route";
 import { ExpenseRoutes } from "./app/module/expense/expense.route";
+import { FinanceRoutes } from "./app/module/finance/finance.route";
 import { GroceryDutyRoutes } from "./app/module/groceryDuty/groceryDuty.route";
 import { MealRoutes } from "./app/module/meal/meal.route";
 import { MealPlanRoutes } from "./app/module/mealPlan/mealPlan.route";
@@ -64,6 +65,7 @@ app.use("/api/v1/expense", ExpenseRoutes);
 app.use("/api/v1/grocery-duty", GroceryDutyRoutes);
 app.use("/api/v1/deposit", DepositRoutes);
 app.use("/api/v1/payment", PaymentRoutes);
+app.use("/api/v1/finance", FinanceRoutes);
 app.use("/api/v1/admin", AdminRoutes);
 app.use("/api/v1/cron", CronRoutes);
 

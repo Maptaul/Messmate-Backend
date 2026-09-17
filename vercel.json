@@ -23,6 +23,10 @@
       "schedule": "0 16 * * *"
     },
     {
+      "path": "/api/v1/cron/meal-headcount",
+      "schedule": "5 17 * * *"
+    },
+    {
       "path": "/api/v1/cron/unpaid-bill-reminder",
       "schedule": "0 4 * * 1"
     }

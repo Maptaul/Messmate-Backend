@@ -20,6 +20,12 @@ router.get(
 	CycleController.getMessCycles,
 );
 
+router.get(
+	"/settlement-preview/:cycleId",
+	auth(Role.ADMIN, Role.MESS_MANAGER, Role.MEMBER),
+	CycleController.previewSettlement,
+);
+
 router.post(
 	"/close-cycle/:cycleId",
 	auth(Role.ADMIN, Role.MESS_MANAGER),

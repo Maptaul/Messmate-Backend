@@ -152,6 +152,19 @@ tomorrow's headcount, so a plan that can change at noon is not usable. The serve
 runs in UTC, so the cutoff uses an explicit Dhaka offset rather than the machine
 clock.
 
+**A member who eats every day does not have to say so every day.** Each member
+has a default lunch and dinner. Any day they set no plan counts at that default;
+a plan always wins, and 0/0 is how one day is switched off. At 23:05 the locked
+day's defaults are written in as real plans and the manager is emailed
+tomorrow's lunch and dinner count, so changing a default afterwards cannot
+rewrite a day that has already been shopped for.
+
+**Nobody waits for the month to close to see their bill.**
+`GET /cycle/settlement-preview/:cycleId` runs the same settlement close-cycle
+runs, on the ledger as it stands, and writes nothing. A member sees their own
+line; the manager sees everyone's. Closing the month produces exactly the bill
+the preview showed at that moment.
+
 **The plan and the register are readable by the whole mess.** Grocery duty
 rotates, so the person shopping on the 10th needs to see that only 5 of 8 are
 eating that day.
@@ -165,10 +178,11 @@ and `my-duty-days` totals what each person did.
 
 ## Database
 
-12 models, one per schema file under `prisma/schema/`:
+13 models, one per schema file under `prisma/schema/`:
 
 `User` · `Mess` · `MessMember` · `BillingCycle` · `MealEntry` · `MealPlan` ·
-`Expense` · `Deposit` · `GroceryDuty` · `MemberBill` · `Payment` · `AuditLog`
+`Expense` · `Deposit` · `GroceryDuty` · `MemberBill` · `Payment` · `AuditLog` ·
+`FinanceEntry`
 
 Entity relationships and the reasoning behind them: **[docs/ERD.md](docs/ERD.md)**.
 
@@ -197,7 +211,7 @@ every caller. Everything else is a single indexed query.
 | --------------------------------------- | ----- | -------------------------------------- |
 | `/admin/dashboard-stats`                | 60 s  | never — TTL only                       |
 | `/grocery-duty/cycle-calendar/:cycleId` | 5 min | a duty is assigned, updated or removed |
-| `/meal-plan/cycle-calendar/:cycleId`    | 5 min | anyone declares a meal                 |
+| `/meal-plan/cycle-calendar/:cycleId`    | 5 min | a meal is declared or a default changes |
 
 - Permission checks stay outside the cache. `checkMessAccess` runs per request;
   only the shared body is stored.
@@ -219,17 +233,18 @@ All under `/api/v1`. Full reference: [docs/API.md](docs/API.md).
 | --------------- | ----------------------------------------------------------------------------- |
 | `/auth`         | Register with email OTP, login, Google, refresh, forgot/reset password, `/me` |
 | `/user`         | Profile, avatar upload and removal                                            |
-| `/mess`         | Create, list, update, soft-delete a mess                                      |
+| `/mess`         | Create, list, update, soft-delete a mess; audit trail and unread activity     |
 | `/member`       | Add and release members, memberships, mess roster                             |
-| `/cycle`        | Open a month, close it (runs the settlement), reopen it (Admin)               |
+| `/cycle`        | Open a month, preview or close it (runs the settlement), reopen it (Admin)    |
 | `/meal`         | The register: what was actually eaten                                         |
-| `/meal-plan`    | The calendar: what a member declares in advance, plus the cutoff              |
+| `/meal-plan`    | The calendar: plans, default meals, the cutoff and each day's headcount       |
 | `/expense`      | Groceries, utilities and rent, with an optional receipt photo                 |
 | `/grocery-duty` | Booking a member for a date range, calendar, per-member totals                |
 | `/deposit`      | Cash handed to the manager before there is a bill                             |
 | `/payment`      | Bills, bKash checkout, and the callback                                       |
+| `/finance`      | A private income and expense tracker with daily to yearly summaries           |
 | `/admin`        | Users, role changes, block/unblock, audit logs, dashboard stats               |
-| `/cron`         | Vercel Cron endpoints for the two email reminders, behind a shared secret     |
+| `/cron`         | Vercel Cron endpoints for the three email jobs, behind a shared secret        |
 
 ### Admin guards
 
@@ -240,7 +255,7 @@ All under `/api/v1`. Full reference: [docs/API.md](docs/API.md).
 - An admin cannot change their own role or status.
 
 `GET /admin/audit-logs` reads back what every module writes: cycle closed and
-reopened, member removed, expense and deposit deleted, payment settled, role
+reopened, member removed, expense and deposit added, changed or deleted, payment settled, role
 changed, user blocked and unblocked, and every meal recorded, changed or deleted
 — each row with the actor and the before/after state, filterable by action,
 entity or actor.
@@ -264,6 +279,12 @@ changes nothing.
 Rows about one person carry a `subjectMemberId`; closing a cycle touches everyone
 and carries none, so it stays out of a member's view. Platform actions like a
 role change carry no `messId` at all and never reach a mess view.
+
+**What is new since I last looked.** `GET /mess/activity-unread/:messId` counts
+the rows in the caller's own scope that arrived after they last opened the feed,
+leaving out what they did themselves; `PATCH /mess/activity-seen/:messId` resets
+it. A deposit recorded against a member, or an expense they fronted, now reaches
+their feed the moment the manager saves it.
 
 ---
 
@@ -355,30 +376,57 @@ A settled payment — bKash or cash — sends the same document as a receipt.
 
 ---
 
+## Personal Finance
+
+Beside the mess, anyone with an account can keep their own money: tuition in,
+bus fare and mobile recharge out. `/finance` is a private income and expense
+tracker, separate from every mess — paying a mess bill does not write into it.
+
+- **Private.** Every read and write is scoped to the caller. Someone else's
+  entry answers `404`, exactly like one that does not exist — an admin included.
+- **Fixed categories.** Income: salary, tuition, family, business, other.
+  Expense: food, mess, transport, education, mobile/internet, health, shopping,
+  entertainment, other. A category that does not belong to the type is `400`,
+  so reports never split "food" from "Food".
+- **Dated honestly.** An entry defaults to today in Dhaka and cannot be dated in
+  the future.
+
+`GET /finance/summary?period=daily|weekly|monthly|yearly&date=YYYY-MM-DD` returns
+income, expense, balance and per-category totals for the period containing that
+date, plus a breakdown with no gaps: a week is seven days running **Saturday to
+Friday**, a month is one bucket per day, a year is twelve months. Sums are done
+in paisa, the same way the settlement is, so a hundred ৳0.10 entries still add
+up to exactly ৳10.
+
+---
+
 ## Scheduled Jobs
 
 Two triggers, one set of jobs, because the app runs in two shapes.
 
 On Vercel, `node-cron` cannot work — a serverless instance sleeps between
-requests and its timers die with it. Two entries in `vercel.json` call
+requests and its timers die with it. Three entries in `vercel.json` call
 authenticated endpoints instead:
 
-| Job                          | Runs              | Emails                                                 |
-| ---------------------------- | ----------------- | ------------------------------------------------------ |
-| `/cron/meal-plan-reminder`   | 16:00 UTC daily   | members of an open cycle with no plan set for tomorrow |
-| `/cron/unpaid-bill-reminder` | 04:00 UTC Mondays | members still owing money on a closed cycle            |
+| Job                          | Runs              | Emails                                                         |
+| ---------------------------- | ----------------- | -------------------------------------------------------------- |
+| `/cron/meal-plan-reminder`   | 16:00 UTC daily   | members with no plan and no default set for tomorrow           |
+| `/cron/meal-headcount`       | 17:05 UTC daily   | each manager: tomorrow's lunch and dinner count, member by member |
+| `/cron/unpaid-bill-reminder` | 04:00 UTC Mondays | members still owing money on a closed cycle                    |
 
 16:00 UTC is 22:00 in Dhaka — one hour before the meal-plan cutoff, which is the
-only time a reminder is worth sending. The bill reminder is weekly rather than
-daily on purpose: a daily email about the same unpaid bill is a nag.
+only time a reminder is worth sending. 17:05 UTC is just past that cutoff, so
+the headcount is final: it first writes each silent member's default in as a
+real plan, then counts. The bill reminder is weekly rather than daily on
+purpose: a daily email about the same unpaid bill is a nag.
 
-Both require `Authorization: Bearer $CRON_SECRET`, which Vercel Cron sends
+All three require `Authorization: Bearer $CRON_SECRET`, which Vercel Cron sends
 automatically, and answer `503` if `CRON_SECRET` is unset — so they are never
-open to the internet. Both accept `?dryRun=true`, which reports exactly who would
-be emailed and sends nothing.
+open to the internet. All accept `?dryRun=true`, which reports exactly who would
+be emailed and sends nothing — and writes nothing.
 
 Run it as a long-lived process instead — `pnpm start` on a VPS, or locally for
-the real mess — and `node-cron` schedules the same two jobs in `Asia/Dhaka`
+the real mess — and `node-cron` schedules the same three jobs in `Asia/Dhaka`
 directly. That scheduler starts from `src/server.ts` only, which the serverless
 entry never imports, so the two triggers can never both fire.
 
@@ -413,7 +461,7 @@ Server starts at `http://localhost:5000`.
 | `pnpm build`                       | `prisma generate` + `tsup` — produces `dist/index.js` for deployment |
 | `pnpm start`                       | run the server locally                                               |
 | `pnpm typecheck`                   | `tsc --noEmit`                                                       |
-| `pnpm test`                        | 91 checks on Node's own test runner                                  |
+| `pnpm test`                        | 121 checks on Node's own test runner                                 |
 | `pnpm check:settlement`            | assert the settlement math balances                                  |
 | `pnpm check:all`                   | typecheck + lint + settlement + tests, the same set CI runs          |
 | `pnpm test:postman`                | drive the Postman collection through newman (`:local` for localhost) |
@@ -527,7 +575,7 @@ against the production database after any schema change.
 
 ## Postman
 
-`postman/MessMate.postman_collection.json` — **103 requests across 18 folders**.
+`postman/MessMate.postman_collection.json` — **125 requests across 19 folders**.
 `baseUrl` already points at the live API, so importing and running it needs no
 edits.
 
@@ -556,6 +604,19 @@ requests assert that every row returned is about that member, and that passing
 someone else's `?memberId=` does not widen it. The cron requests all use `?dryRun=true`, so they report
 who would be emailed and send nothing; they need `cronSecret` set to the same
 value as the server's `CRON_SECRET`.
+
+Eight more came with default meals, the settlement preview and the activity
+feed: the preview as manager and as member (the member's must hold exactly one
+line, their own), setting a default and the `403` for setting someone else's,
+one day's headcount with `isDefault` on every row, the unread count and marking
+it seen, and the headcount job as a dry run.
+
+**Personal finance** adds fourteen: categories, an income and an expense, the
+two `400`s (a category that does not fit, a future date), a filtered list, an
+update, all four summaries — each asserting that `balance` is income minus
+expense and that the breakdown has the right length, with the week starting on
+a Saturday — a manager getting `404` on a member's entry, and two deletes that
+leave the demo account as they found it.
 
 `pnpm test:postman` runs the collection from the command line through newman,
 and `pnpm test:postman:local` points it at `localhost:5000`.
@@ -592,7 +653,7 @@ quote one value that finds it.
 - [x] Settlement + cycle close transaction
 - [x] bKash payment + idempotent callback
 - [x] Admin operations — users, roles, block/unblock, audit logs, dashboard stats
-- [x] Postman collection — 103 requests, verified end to end
+- [x] Postman collection — 125 requests, verified end to end
 - [x] Deployment
 - [x] Demo video
 - [x] Half meals, deposit-funded groceries, the August 2026 ledger as a test
@@ -600,6 +661,8 @@ quote one value that finds it.
 - [x] Bill and receipt emails with PDF invoices, itemised like the paper sheet
 - [x] Cash payments recorded by the manager, alongside bKash
 - [x] Rolling monthly advance and a balance that carries between months
+- [x] Default meals, a nightly headcount for the manager, a running bill preview, and an activity feed with unread counts
+- [x] A private income and expense tracker with daily, weekly, monthly and yearly summaries
 
 Known limitations and what comes next: **[docs/ROADMAP.md](docs/ROADMAP.md)**.
 

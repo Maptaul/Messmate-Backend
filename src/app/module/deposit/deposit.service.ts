@@ -74,15 +74,29 @@ const addDeposit = async (payload: IAddDepositPayload, user: RequestUser) => {
 		);
 	}
 
-	return prisma.deposit.create({
-		data: {
-			cycleId: cycle.id,
-			memberId: payload.memberId,
-			amount: payload.amount,
-			note: payload.note ?? null,
-			createdById: user.userId,
-		},
-		select: depositSelect,
+	return prisma.$transaction(async (tx) => {
+		const deposit = await tx.deposit.create({
+			data: {
+				cycleId: cycle.id,
+				memberId: payload.memberId,
+				amount: payload.amount,
+				note: payload.note ?? null,
+				createdById: user.userId,
+			},
+			select: depositSelect,
+		});
+
+		await writeAudit(tx, {
+			actorId: user.userId,
+			action: AuditAction.DEPOSIT_ADDED,
+			messId: cycle.messId,
+			subjectMemberId: payload.memberId,
+			entity: "Deposit",
+			entityId: deposit.id,
+			after: { amount: Number(deposit.amount), note: deposit.note },
+		});
+
+		return deposit;
 	});
 };
 
@@ -142,7 +156,13 @@ const updateDeposit = async (
 ) => {
 	const deposit = await prisma.deposit.findFirst({
 		where: { id: depositId, isDeleted: false },
-		select: { id: true, cycleId: true },
+		select: {
+			id: true,
+			cycleId: true,
+			amount: true,
+			note: true,
+			memberId: true,
+		},
 	});
 
 	if (!deposit) {
@@ -151,10 +171,25 @@ const updateDeposit = async (
 
 	const cycle = await loadWritableCycle(deposit.cycleId, user);
 
-	return prisma.deposit.update({
-		where: { id: depositId },
-		data: { amount: payload.amount, note: payload.note },
-		select: depositSelect,
+	return prisma.$transaction(async (tx) => {
+		const updated = await tx.deposit.update({
+			where: { id: depositId },
+			data: { amount: payload.amount, note: payload.note },
+			select: depositSelect,
+		});
+
+		await writeAudit(tx, {
+			actorId: user.userId,
+			action: AuditAction.DEPOSIT_UPDATED,
+			messId: cycle.messId,
+			subjectMemberId: deposit.memberId,
+			entity: "Deposit",
+			entityId: depositId,
+			before: { amount: Number(deposit.amount), note: deposit.note },
+			after: { amount: Number(updated.amount), note: updated.note },
+		});
+
+		return updated;
 	});
 };
 

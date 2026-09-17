@@ -1,4 +1,5 @@
 import httpStatus from "http-status";
+import type { Prisma } from "../../../generated/prisma/client";
 import {
 	AuditAction,
 	CycleStatus,
@@ -56,6 +57,137 @@ const daysPresentInCycle = (
 
 	const dayMs = 1000 * 60 * 60 * 24;
 	return Math.floor((to.getTime() - from.getTime()) / dayMs) + 1;
+};
+
+type TSettlementCycle = {
+	id: string;
+	year: number;
+	month: number;
+	messId: string;
+	monthlyRent: number;
+	monthlyDeposit: number;
+};
+
+// Reads the cycle's ledger and runs the settlement without writing anything,
+// so closing a month and previewing it can never disagree.
+const loadSettlement = async (
+	db: Prisma.TransactionClient | typeof prisma,
+	cycle: TSettlementCycle,
+) => {
+	const members = await db.messMember.findMany({
+		where: {
+			messId: cycle.messId,
+			isDeleted: false,
+
+			OR: [{ status: MemberStatus.ACTIVE }, { leftAt: { not: null } }],
+		},
+		select: {
+			id: true,
+			joinedAt: true,
+			leftAt: true,
+			user: { select: { name: true, email: true } },
+		},
+	});
+
+	const [mealTotals, expenses, deposits] = await Promise.all([
+		db.mealEntry.groupBy({
+			by: ["memberId"],
+			where: { cycleId: cycle.id, isDeleted: false },
+			_sum: { lunch: true, dinner: true },
+		}),
+		db.expense.findMany({
+			where: { cycleId: cycle.id, isDeleted: false },
+			select: {
+				type: true,
+				amount: true,
+				splitMethod: true,
+				paidByMemberId: true,
+			},
+		}),
+		db.deposit.groupBy({
+			by: ["memberId"],
+			where: { cycleId: cycle.id, isDeleted: false },
+			_sum: { amount: true },
+		}),
+	]);
+
+	const mealByMember = new Map(
+		mealTotals.map((row) => [
+			row.memberId,
+			(row._sum.lunch ?? 0) + (row._sum.dinner ?? 0),
+		]),
+	);
+
+	const depositByMember = new Map(
+		deposits.map((row) => [row.memberId, Number(row._sum.amount ?? 0)]),
+	);
+
+	const paidByMember = new Map<string, number>();
+	for (const expense of expenses) {
+		if (!expense.paidByMemberId) continue;
+		paidByMember.set(
+			expense.paidByMemberId,
+			(paidByMember.get(expense.paidByMemberId) ?? 0) + Number(expense.amount),
+		);
+	}
+
+	const previousCycle = await db.billingCycle.findFirst({
+		where: {
+			messId: cycle.messId,
+			status: CycleStatus.CLOSED,
+			OR: [
+				{ year: { lt: cycle.year } },
+				{ year: cycle.year, month: { lt: cycle.month } },
+			],
+		},
+		orderBy: [{ year: "desc" }, { month: "desc" }],
+		select: {
+			bills: { select: { memberId: true, dueAmount: true } },
+		},
+	});
+
+	const openingByMember = new Map(
+		(previousCycle?.bills ?? []).map((bill) => [
+			bill.memberId,
+			Number(bill.dueAmount),
+		]),
+	);
+
+	const settlementMembers: SettlementMember[] = members.map((member) => ({
+		memberId: member.id,
+		mealCount: mealByMember.get(member.id) ?? 0,
+		depositTotal: depositByMember.get(member.id) ?? 0,
+		paidExpenseTotal: paidByMember.get(member.id) ?? 0,
+		openingBalance: openingByMember.get(member.id) ?? 0,
+		daysPresent: daysPresentInCycle(
+			cycle.year,
+			cycle.month,
+			member.joinedAt,
+			member.leftAt,
+		),
+	}));
+
+	const result = computeSettlement({
+		members: settlementMembers,
+		expenses: expenses.map((e) => ({
+			type: e.type,
+			amount: Number(e.amount),
+			splitMethod: e.splitMethod,
+		})),
+		monthlyRent: cycle.monthlyRent,
+		monthlyDeposit: cycle.monthlyDeposit,
+		daysInMonth: daysInMonth(cycle.year, cycle.month),
+	});
+
+	const warning = depositFundedGroceryWarning({
+		depositTotal: [...depositByMember.values()].reduce(
+			(sum, amount) => sum + amount,
+			0,
+		),
+		expenses,
+	});
+
+	return { members, result, warnings: warning ? [warning] : [] };
 };
 
 const openCycle = async (payload: IOpenCyclePayload, user: RequestUser) => {
@@ -224,6 +356,69 @@ const getSingleCycle = async (cycleId: string, user: RequestUser) => {
 	};
 };
 
+const previewSettlement = async (cycleId: string, user: RequestUser) => {
+	const cycle = await prisma.billingCycle.findUnique({
+		where: { id: cycleId },
+		select: {
+			id: true,
+			year: true,
+			month: true,
+			status: true,
+			messId: true,
+			mess: { select: { monthlyRent: true, monthlyDeposit: true } },
+		},
+	});
+
+	if (!cycle) {
+		throw new AppError(httpStatus.NOT_FOUND, "Billing Cycle Not Found");
+	}
+
+	const membership = await checkMessAccess(cycle.messId, user);
+
+	if (cycle.status !== CycleStatus.OPEN) {
+		throw new AppError(
+			httpStatus.CONFLICT,
+			"This Cycle Is Closed. Its Bills Are Final, So There Is Nothing To Preview.",
+		);
+	}
+
+	const { members, result, warnings } = await loadSettlement(prisma, {
+		id: cycle.id,
+		year: cycle.year,
+		month: cycle.month,
+		messId: cycle.messId,
+		monthlyRent: Number(cycle.mess.monthlyRent),
+		monthlyDeposit: Number(cycle.mess.monthlyDeposit),
+	});
+
+	const nameByMember = new Map(members.map((m) => [m.id, m.user.name]));
+
+	const bills = result.bills.map((bill) => ({
+		...bill,
+		name: nameByMember.get(bill.memberId) ?? null,
+	}));
+
+	const isMember = user.role === Role.MEMBER;
+
+	return {
+		cycle: {
+			id: cycle.id,
+			year: cycle.year,
+			month: cycle.month,
+			status: cycle.status,
+		},
+		isPreview: true,
+		asOf: new Date(),
+		totalMeals: result.totalMeals,
+		totalGrocery: result.totalGrocery,
+		mealRate: result.mealRate,
+		bills: isMember
+			? bills.filter((bill) => bill.memberId === membership?.id)
+			: bills,
+		warnings: isMember ? [] : warnings,
+	};
+};
+
 const closeCycle = async (cycleId: string, user: RequestUser) => {
 	const cycle = await prisma.billingCycle.findUnique({
 		where: { id: cycleId },
@@ -266,118 +461,13 @@ const closeCycle = async (cycleId: string, user: RequestUser) => {
 			throw new AppError(httpStatus.CONFLICT, "This Cycle Is Already Closed");
 		}
 
-		const members = await tx.messMember.findMany({
-			where: {
-				messId: cycle.messId,
-				isDeleted: false,
-
-				OR: [{ status: MemberStatus.ACTIVE }, { leftAt: { not: null } }],
-			},
-			select: {
-				id: true,
-				joinedAt: true,
-				leftAt: true,
-				user: { select: { name: true, email: true } },
-			},
-		});
-
-		const [mealTotals, expenses, deposits] = await Promise.all([
-			tx.mealEntry.groupBy({
-				by: ["memberId"],
-				where: { cycleId, isDeleted: false },
-				_sum: { lunch: true, dinner: true },
-			}),
-			tx.expense.findMany({
-				where: { cycleId, isDeleted: false },
-				select: {
-					type: true,
-					amount: true,
-					splitMethod: true,
-					paidByMemberId: true,
-				},
-			}),
-			tx.deposit.groupBy({
-				by: ["memberId"],
-				where: { cycleId, isDeleted: false },
-				_sum: { amount: true },
-			}),
-		]);
-
-		const mealByMember = new Map(
-			mealTotals.map((row) => [
-				row.memberId,
-				(row._sum.lunch ?? 0) + (row._sum.dinner ?? 0),
-			]),
-		);
-
-		const depositByMember = new Map(
-			deposits.map((row) => [row.memberId, Number(row._sum.amount ?? 0)]),
-		);
-
-		const paidByMember = new Map<string, number>();
-		for (const expense of expenses) {
-			if (!expense.paidByMemberId) continue;
-			paidByMember.set(
-				expense.paidByMemberId,
-				(paidByMember.get(expense.paidByMemberId) ?? 0) +
-					Number(expense.amount),
-			);
-		}
-
-		const previousCycle = await tx.billingCycle.findFirst({
-			where: {
-				messId: cycle.messId,
-				status: CycleStatus.CLOSED,
-				OR: [
-					{ year: { lt: cycle.year } },
-					{ year: cycle.year, month: { lt: cycle.month } },
-				],
-			},
-			orderBy: [{ year: "desc" }, { month: "desc" }],
-			select: {
-				bills: { select: { memberId: true, dueAmount: true } },
-			},
-		});
-
-		const openingByMember = new Map(
-			(previousCycle?.bills ?? []).map((bill) => [
-				bill.memberId,
-				Number(bill.dueAmount),
-			]),
-		);
-
-		const settlementMembers: SettlementMember[] = members.map((member) => ({
-			memberId: member.id,
-			mealCount: mealByMember.get(member.id) ?? 0,
-			depositTotal: depositByMember.get(member.id) ?? 0,
-			paidExpenseTotal: paidByMember.get(member.id) ?? 0,
-			openingBalance: openingByMember.get(member.id) ?? 0,
-			daysPresent: daysPresentInCycle(
-				cycle.year,
-				cycle.month,
-				member.joinedAt,
-				member.leftAt,
-			),
-		}));
-
-		const result = computeSettlement({
-			members: settlementMembers,
-			expenses: expenses.map((e) => ({
-				type: e.type,
-				amount: Number(e.amount),
-				splitMethod: e.splitMethod,
-			})),
+		const { members, result, warnings } = await loadSettlement(tx, {
+			id: cycleId,
+			year: cycle.year,
+			month: cycle.month,
+			messId: cycle.messId,
 			monthlyRent: Number(cycle.mess.monthlyRent),
 			monthlyDeposit: Number(cycle.mess.monthlyDeposit),
-			daysInMonth: daysInMonth(cycle.year, cycle.month),
-		});
-
-		const warning = depositFundedGroceryWarning({
-			depositTotal: [...depositByMember.values()].reduce(
-				(sum, amount) => sum + amount,
-				0,
-			),
-			expenses,
 		});
 
 		if (result.bills.length > 0) {
@@ -424,7 +514,7 @@ const closeCycle = async (cycleId: string, user: RequestUser) => {
 		return {
 			cycle: closed,
 			bills: result.bills,
-			warnings: warning ? [warning] : [],
+			warnings,
 			result,
 			recipients: members.map((member) => ({
 				memberId: member.id,
@@ -557,6 +647,7 @@ export const CycleServices = {
 	openCycle,
 	getMessCycles,
 	getSingleCycle,
+	previewSettlement,
 	closeCycle,
 	reopenCycle,
 };
