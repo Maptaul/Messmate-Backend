@@ -158,10 +158,10 @@ the helper was removed and every call site went back to a tagged `console.error`
 ### 10. `FRONTEND_URL` pointed at localhost
 
 The bKash callback used to redirect a real payer to `http://localhost:3000`.
-There is no frontend yet, so the API now serves its own result page at
-`GET /api/v1/payment/result` — a small responsive HTML page that reads correctly
-on the phone the payer is holding. Set `PAYMENT_RESULT_URL` when a frontend
-exists and the callback will use that instead.
+The API serves its own result page at `GET /api/v1/payment/result` — a small
+responsive HTML page that reads correctly on the phone the payer is holding — for
+when no frontend is configured. With the frontend in place, `PAYMENT_RESULT_URL`
+points at its `/payment/success` page and the callback redirects there instead.
 
 ### 11. Scheduled jobs
 
@@ -419,9 +419,10 @@ deleted entry left every summary.
 **Error tracking.** Logs are structured now, but nothing aggregates them.
 Sentry or similar needs an account and a DSN.
 
-**Email links still point at localhost.** `FRONTEND_URL` is used for the
-`/login` links in welcome, reminder and bill emails. The payment redirect no
-longer depends on it, but those links stay dead until a frontend exists.
+**Email links follow `FRONTEND_URL`.** It is used for the `/login` links in
+welcome, reminder and bill emails and for Stripe's return URLs, so production
+needs it set to the deployed frontend's origin — on localhost those links only
+work on the developer's machine.
 
 **A rounded meal rate.** The mess works to ৳49 a meal where MessMate keeps
 ৳48.7965, so every hand-written bill sits a few taka above the computed one — for

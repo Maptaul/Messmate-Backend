@@ -2,9 +2,10 @@
 
 A REST API for the monthly accounts of a shared mess. Members record daily
 meals, the manager records groceries and utility bills, and at month end the
-system computes every member's share and lets them settle it through **bKash**.
+system computes every member's share and lets them settle it through **bKash**
+or a card (**Stripe**), or hand the manager cash.
 
-**Live API:** <https://messmatebackend.vercel.app> · **[API Reference](docs/API.md)** · **[Postman collection](postman/MessMate.postman_collection.json)**
+**Live API:** <https://messmatebackend.vercel.app> · **[API Reference](docs/API.md)** · **[Postman collection](postman/MessMate.postman_collection.json)** · **Frontend:** <https://github.com/Maptaul/Messmate-frontend>
 
 Our own 8-person mess in Chattogram keeps this ledger by hand every month: who
 ate how many meals, who did the grocery run, who paid the gas and electricity
@@ -24,6 +25,7 @@ bill, and who owes what at the end. MessMate turns that notebook into an API.
 | Zod                                          | Request validation                                            |
 | Redis                                        | bKash token cache, OTP state, read cache, rate-limit counters |
 | bKash Tokenized Checkout                     | Payment                                                       |
+| Stripe Checkout (test mode)                  | Card payment                                                  |
 | Nodemailer + EJS                             | OTP, bill, receipt and reminder emails                        |
 | pdfkit                                       | Bill and receipt PDFs attached to those emails                |
 | node-cron + Vercel Cron                      | Scheduled reminders, one set of jobs either way               |
@@ -288,7 +290,7 @@ their feed the moment the manager saves it.
 
 ---
 
-## Payment (bKash Tokenized Checkout)
+## Payment (bKash, Stripe, cash)
 
 ```
 **Cash still works.** Most mess money is notes in a hand, so
@@ -328,11 +330,19 @@ the gateway call then fails the row stays `UNPAID`.
 and refresh flow and caches both tokens in Redis (id token 1 h, refresh token
 28 days). Sandbox versus live is `BKASH_BASE_URL`, not a code branch.
 
-After checkout, bKash sends the payer back to the API's own result page at
-`GET /payment/result` — a small responsive page, since a payer is holding a
-phone and there is no frontend yet. Point `PAYMENT_RESULT_URL` at a frontend
-route when one exists and the callback will redirect there instead. Settlement
-happens server-side either way; the page only reports what already happened.
+After checkout, bKash sends the payer to `PAYMENT_RESULT_URL?status=…` — the
+frontend's `/payment/success` page. Without it the API falls back to its own
+small result page at `GET /payment/result`. Settlement happens server-side either
+way; the page only reports what already happened.
+
+**Card payments go through Stripe Checkout (test mode).**
+`POST /payment/create-stripe-session { billId }` commits a Payment row for the
+bill's full due and returns a hosted `checkoutUrl`. Stripe returns the payer to
+`FRONTEND_URL/payment/success?session_id=…`, and the frontend calls
+`POST /payment/confirm-stripe { sessionId }`, which retrieves the session from
+Stripe and settles only when it is paid — the redirect alone never marks anything
+paid. Confirming the same session twice credits the bill once. Details:
+[docs/API.md](docs/API.md#paying-by-card-stripe-test-mode).
 
 ---
 
@@ -506,14 +516,16 @@ build script — so build locally before deploying:
 pnpm build && vercel --prod
 ```
 
-Set every variable from `.env.example` in the Vercel dashboard. Three must differ
+Set every variable from `.env.example` in the Vercel dashboard. These must differ
 from their local values:
 
 | Variable             | Production value                              |
 | -------------------- | --------------------------------------------- |
 | `BACKEND_URL`        | `https://messmatebackend.vercel.app`          |
 | `BKASH_CALLBACK_URL` | `https://messmatebackend.vercel.app/api/v1`   |
-| `FRONTEND_URL`       | wherever the browser should land after paying |
+| `FRONTEND_URL`       | the frontend's origin (Stripe returns there, email links point there) |
+| `PAYMENT_RESULT_URL` | the frontend's origin + `/payment/success`    |
+| `STRIPE_SECRET_KEY`  | a Stripe test key (`sk_test_…`)               |
 
 If `BKASH_CALLBACK_URL` is left on localhost, bKash sends the browser to a
 machine it cannot reach and the payment is taken but never settled. Do not set
@@ -652,6 +664,7 @@ quote one value that finds it.
 - [x] Mess, member, cycle, meal, meal plan, expense, deposit, grocery duty
 - [x] Settlement + cycle close transaction
 - [x] bKash payment + idempotent callback
+- [x] Stripe card payments (test mode), confirmed server-side
 - [x] Admin operations — users, roles, block/unblock, audit logs, dashboard stats
 - [x] Postman collection — 125 requests, verified end to end
 - [x] Deployment
@@ -663,6 +676,7 @@ quote one value that finds it.
 - [x] Rolling monthly advance and a balance that carries between months
 - [x] Default meals, a nightly headcount for the manager, a running bill preview, and an activity feed with unread counts
 - [x] A private income and expense tracker with daily, weekly, monthly and yearly summaries
+- [x] Web frontend — [Messmate-frontend](https://github.com/Maptaul/Messmate-frontend) (Next.js 16, English + Bangla)
 
 Known limitations and what comes next: **[docs/ROADMAP.md](docs/ROADMAP.md)**.
 
@@ -673,6 +687,7 @@ Known limitations and what comes next: **[docs/ROADMAP.md](docs/ROADMAP.md)**.
 ```text
 Project Name    : MessMate — Smart Mess & Shared Housing Management Platform
 Backend Repo    : https://github.com/Maptaul/Messmate-Backend
+Frontend Repo   : https://github.com/Maptaul/Messmate-frontend
 Live API        : https://messmatebackend.vercel.app
 API Docs        : https://github.com/Maptaul/Messmate-Backend/blob/main/docs/API.md
 Demo Video      : https://www.loom.com/share/be92f0b77582452e86a86ddcceb4bcdd
