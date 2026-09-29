@@ -14,13 +14,19 @@ import config from "../../config";
 import type { IQuery } from "../../interfaces";
 import { executeBkashPayment, getBkashIdToken } from "../../lib/bkash";
 import { prisma } from "../../lib/prisma";
+import {
+	getStripe,
+	isStripeSessionSettleable,
+	toPoisha,
+} from "../../lib/stripe";
 import type { RequestUser } from "../../middleware/checkAuth";
 import { AppError } from "../../utils/AppError";
 import { writeAudit } from "../../utils/audit";
 import { checkMessAccess } from "../../utils/checkMessAccess";
+import { monthName } from "../../utils/months";
 import { sendPaymentReceipt } from "./payment.mail";
 import type {
-	IBkashExecuteResult,
+	IConfirmStripePaymentPayload,
 	ICreatePaymentPayload,
 	IRecordCashPaymentPayload,
 } from "./payment.interface";
@@ -51,6 +57,7 @@ const paymentSelect = {
 	status: true,
 	amount: true,
 	currency: true,
+	paymentGateway: true,
 	merchantInvoiceNumber: true,
 	bkashPaymentId: true,
 	bkashTrxId: true,
@@ -122,18 +129,17 @@ const getMyBills = async (query: IQuery, user: RequestUser) => {
 	};
 };
 
-const createPayment = async (
-	payload: ICreatePaymentPayload,
-	user: RequestUser,
-) => {
+// Shared by every gateway: the caller's own bill, with something left to pay.
+const findPayableBill = async (billId: string, user: RequestUser) => {
 	const bill = await prisma.memberBill.findUnique({
-		where: { id: payload.billId },
+		where: { id: billId },
 		select: {
 			id: true,
 			memberId: true,
 			dueAmount: true,
 			status: true,
-			member: { select: { messId: true } },
+			member: { select: { messId: true, mess: { select: { name: true } } } },
+			cycle: { select: { year: true, month: true } },
 		},
 	});
 
@@ -159,6 +165,15 @@ const createPayment = async (
 			"This Bill Has Nothing Left To Pay",
 		);
 	}
+
+	return { bill, dueAmount };
+};
+
+const createPayment = async (
+	payload: ICreatePaymentPayload,
+	user: RequestUser,
+) => {
+	const { bill, dueAmount } = await findPayableBill(payload.billId, user);
 
 	const paymentId = randomUUID();
 	const amount = dueAmount.toFixed(2);
@@ -239,17 +254,17 @@ const settlePayment = async (
 	messId: string,
 	memberId: string,
 	amount: number,
-	executeResult: IBkashExecuteResult,
+	gateway: { bkashTrxId?: string; response: object },
 ) => {
 	return prisma.$transaction(async (tx) => {
 		const claimed = await tx.payment.updateMany({
 			where: { id: paymentId, status: PaymentStatus.UNPAID },
 			data: {
 				status: PaymentStatus.PAID,
-				bkashTrxId: executeResult.trxID,
+				bkashTrxId: gateway.bkashTrxId,
 
 				paidAt: new Date(),
-				gatewayResponse: executeResult as object,
+				gatewayResponse: gateway.response,
 			},
 		});
 
@@ -295,7 +310,7 @@ const settlePayment = async (
 			after: {
 				status: PaymentStatus.PAID,
 				amount,
-				bkashTrxId: executeResult.trxID,
+				bkashTrxId: gateway.bkashTrxId,
 				billPaidAmount: paidAmount,
 				billDueAmount: dueAmount,
 			},
@@ -389,7 +404,7 @@ const paymentCallback = async (query: Record<string, unknown>) => {
 		payment.member.messId,
 		payment.memberId,
 		amount,
-		executeResult,
+		{ bkashTrxId: executeResult.trxID, response: executeResult },
 	);
 
 	if (settled) {
@@ -397,6 +412,169 @@ const paymentCallback = async (query: Record<string, unknown>) => {
 	}
 
 	return { redirectUrl: redirectTo("success") };
+};
+
+const createStripeSession = async (
+	payload: ICreatePaymentPayload,
+	user: RequestUser,
+) => {
+	if (!config.frontend_url) {
+		throw new AppError(
+			httpStatus.INTERNAL_SERVER_ERROR,
+			"FRONTEND_URL Is Not Configured, So Stripe Has Nowhere To Return The Payer",
+		);
+	}
+
+	const stripe = getStripe();
+	const { bill, dueAmount } = await findPayableBill(payload.billId, user);
+
+	const paymentId = randomUUID();
+	const frontendUrl = config.frontend_url.replace(/\/+$/, "");
+
+	await prisma.payment.create({
+		data: {
+			id: paymentId,
+			merchantInvoiceNumber: paymentId,
+			billId: bill.id,
+			memberId: bill.memberId,
+			amount: dueAmount,
+			paymentGateway: "stripe",
+			payerReference: user.email,
+		},
+	});
+
+	try {
+		const session = await stripe.checkout.sessions.create({
+			mode: "payment",
+			customer_email: user.email,
+			client_reference_id: paymentId,
+			line_items: [
+				{
+					quantity: 1,
+					price_data: {
+						currency: "bdt",
+						unit_amount: toPoisha(dueAmount),
+						product_data: {
+							name: `${bill.member.mess.name} bill, ${monthName(bill.cycle.month)} ${bill.cycle.year}`,
+						},
+					},
+				},
+			],
+			metadata: { paymentId },
+			success_url: `${frontendUrl}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
+			cancel_url: `${frontendUrl}/payment/cancel?status=cancel`,
+		});
+
+		await prisma.payment.update({
+			where: { id: paymentId },
+			data: { gatewayResponse: { sessionId: session.id } },
+		});
+
+		return {
+			paymentId,
+			amount: dueAmount.toFixed(2),
+			checkoutUrl: session.url,
+		};
+	} catch (error) {
+		await prisma.payment.update({
+			where: { id: paymentId },
+			data: { status: PaymentStatus.FAILED },
+		});
+
+		console.error("[stripe] checkout session failed", error);
+
+		throw new AppError(
+			httpStatus.BAD_GATEWAY,
+			"Stripe Refused To Start This Payment",
+		);
+	}
+};
+
+// Called by the frontend's /payment/success page with Stripe's session id.
+// Settling is idempotent, so a refresh of that page is harmless.
+const confirmStripePayment = async (
+	payload: IConfirmStripePaymentPayload,
+	user: RequestUser,
+) => {
+	const session = await getStripe().checkout.sessions.retrieve(
+		payload.sessionId,
+	);
+
+	const paymentId = session.metadata?.paymentId;
+
+	const payment = paymentId
+		? await prisma.payment.findUnique({
+				where: { id: paymentId },
+				select: {
+					id: true,
+					billId: true,
+					amount: true,
+					status: true,
+					memberId: true,
+					member: { select: { userId: true, messId: true } },
+				},
+			})
+		: null;
+
+	if (!payment) {
+		throw new AppError(httpStatus.NOT_FOUND, "Payment Not Found");
+	}
+
+	if (payment.member.userId !== user.userId) {
+		throw new AppError(
+			httpStatus.FORBIDDEN,
+			"You Can Only Confirm Your Own Payment",
+		);
+	}
+
+	if (payment.status === PaymentStatus.PAID) {
+		return { paid: true, paymentId: payment.id };
+	}
+
+	const amount = Number(payment.amount);
+
+	if (session.payment_status !== "paid") {
+		return { paid: false, paymentId: payment.id };
+	}
+
+	const gatewayResponse = {
+		sessionId: session.id,
+		paymentIntent:
+			typeof session.payment_intent === "string"
+				? session.payment_intent
+				: (session.payment_intent?.id ?? null),
+		amountTotal: session.amount_total,
+		currency: session.currency,
+		paymentStatus: session.payment_status,
+	};
+
+	if (!isStripeSessionSettleable(session, amount)) {
+		await prisma.payment.updateMany({
+			where: { id: payment.id, status: PaymentStatus.UNPAID },
+			data: { status: PaymentStatus.FAILED, gatewayResponse },
+		});
+
+		throw new AppError(
+			httpStatus.CONFLICT,
+			"Stripe Charged A Different Amount Than This Bill, So It Was Not Settled",
+		);
+	}
+
+	const settled = await settlePayment(
+		payment.id,
+		payment.billId,
+		payment.member.userId,
+		payment.member.messId,
+		payment.memberId,
+		amount,
+		{ response: gatewayResponse },
+	);
+
+	if (settled) {
+		await sendPaymentReceipt(payment.id);
+	}
+
+	return { paid: true, paymentId: payment.id };
 };
 
 const getMyPayments = async (query: IQuery, user: RequestUser) => {
@@ -684,6 +862,8 @@ export const PaymentServices = {
 	getCycleBills,
 	recordCashPayment,
 	paymentCallback,
+	createStripeSession,
+	confirmStripePayment,
 	getMyPayments,
 	getSinglePayment,
 };

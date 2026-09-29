@@ -24,6 +24,20 @@ router.post(
 	PaymentController.createPayment,
 );
 
+router.post(
+	"/create-stripe-session",
+	auth(Role.MESS_MANAGER, Role.MEMBER),
+	validateRequest(PaymentValidation.CreatePaymentValidationZodSchema),
+	PaymentController.createStripeSession,
+);
+
+router.post(
+	"/confirm-stripe",
+	auth(Role.MESS_MANAGER, Role.MEMBER),
+	validateRequest(PaymentValidation.ConfirmStripePaymentValidationZodSchema),
+	PaymentController.confirmStripePayment,
+);
+
 router.get(
 	"/cycle-bills/:cycleId",
 	auth(Role.ADMIN, Role.MESS_MANAGER),

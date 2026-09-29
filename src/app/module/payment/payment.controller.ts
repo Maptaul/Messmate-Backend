@@ -33,6 +33,33 @@ const createPayment = catchAsync(async (req: Request, res: Response) => {
 	});
 });
 
+const createStripeSession = catchAsync(async (req: Request, res: Response) => {
+	const result = await PaymentServices.createStripeSession(req.body, req.user!);
+
+	sendResponse(res, {
+		statusCode: httpStatus.CREATED,
+		success: true,
+		message: "Stripe Checkout Started Successfully",
+		data: result,
+	});
+});
+
+const confirmStripePayment = catchAsync(async (req: Request, res: Response) => {
+	const result = await PaymentServices.confirmStripePayment(
+		req.body,
+		req.user!,
+	);
+
+	sendResponse(res, {
+		statusCode: httpStatus.OK,
+		success: true,
+		message: result.paid
+			? "Payment Confirmed Successfully"
+			: "Payment Has Not Completed Yet",
+		data: result,
+	});
+});
+
 const getCycleBills = catchAsync(async (req: Request, res: Response) => {
 	const { cycleId } = req.params;
 	const user = req.user!;
@@ -108,6 +135,8 @@ const getSinglePayment = catchAsync(async (req: Request, res: Response) => {
 export const PaymentController = {
 	getMyBills,
 	createPayment,
+	createStripeSession,
+	confirmStripePayment,
 	getCycleBills,
 	recordCashPayment,
 	paymentCallback,

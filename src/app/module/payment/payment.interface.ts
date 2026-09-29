@@ -2,6 +2,10 @@ export interface ICreatePaymentPayload {
 	billId: string;
 }
 
+export interface IConfirmStripePaymentPayload {
+	sessionId: string;
+}
+
 export interface IRecordCashPaymentPayload {
 	billId: string;
 	amount: number;

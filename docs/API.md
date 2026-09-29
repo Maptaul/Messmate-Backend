@@ -203,6 +203,8 @@ users, `?type=` on expenses, `?memberId=` on meals and deposits, `?action=` and
 | GET | `/api/v1/payment/result` | _public_ | — | HTML page the payer lands on |
 | GET | `/api/v1/payment/my-bills` | `MESS_MANAGER` `MEMBER` | — |  |
 | POST | `/api/v1/payment/create-payment` | `MESS_MANAGER` `MEMBER` | yes |  |
+| POST | `/api/v1/payment/create-stripe-session` | `MESS_MANAGER` `MEMBER` | yes | card payment, returns `checkoutUrl` |
+| POST | `/api/v1/payment/confirm-stripe` | `MESS_MANAGER` `MEMBER` | yes | `{ sessionId }` from the success redirect |
 | GET | `/api/v1/payment/cycle-bills/:cycleId` | `ADMIN` `MESS_MANAGER` | — | every bill in one cycle |
 | POST | `/api/v1/payment/record-cash-payment` | `ADMIN` `MESS_MANAGER` | yes | cash handed to the manager |
 | GET | `/api/v1/payment/my-payments` | `MESS_MANAGER` `MEMBER` | — |  |
@@ -361,6 +363,28 @@ bKash  -> GET /api/v1/payment/callback?paymentID=...&status=...
           always calls tokenized/checkout/execute and verifies before settling
           -> 302 redirect back to the frontend
 ```
+
+### Paying by card (Stripe, test mode)
+
+```
+MEMBER -> POST /api/v1/payment/create-stripe-session { billId }
+          same bill checks as bKash; amount is the bill's dueAmount, in BDT
+          Payment row committed with paymentGateway "stripe"
+          -> { paymentId, amount, checkoutUrl }
+
+          member pays on Stripe Checkout (test card 4242 4242 4242 4242)
+
+Stripe -> browser to FRONTEND_URL/payment/success?session_id=...
+          or FRONTEND_URL/payment/cancel?status=cancel
+
+FRONTEND -> POST /api/v1/payment/confirm-stripe { sessionId }
+          retrieves the session from Stripe and settles only when it is paid,
+          in BDT, for exactly the Payment row's amount -> { paid, paymentId }
+```
+
+Settling reuses the bKash path's conditional update, so confirming the same
+session twice credits the bill once. Needs `STRIPE_SECRET_KEY` and
+`FRONTEND_URL`; without the key the two endpoints answer `503`.
 
 ### Paying in cash
 

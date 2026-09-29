@@ -4,6 +4,10 @@ const CreatePaymentValidationZodSchema = z.object({
 	billId: z.string().min(1, "Bill Id Is Required"),
 });
 
+const ConfirmStripePaymentValidationZodSchema = z.object({
+	sessionId: z.string().min(1, "Session Id Is Required"),
+});
+
 const RecordCashPaymentValidationZodSchema = z.object({
 	billId: z.string().min(1, "Bill Id Is Required"),
 	amount: z.coerce
@@ -15,5 +19,6 @@ const RecordCashPaymentValidationZodSchema = z.object({
 
 export const PaymentValidation = {
 	CreatePaymentValidationZodSchema,
+	ConfirmStripePaymentValidationZodSchema,
 	RecordCashPaymentValidationZodSchema,
 };

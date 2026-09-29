@@ -46,7 +46,9 @@ export const sendPaymentReceipt = async (paymentId: string) => {
 
 		const methodLabel = isCash
 			? "Cash, handed to the manager"
-			: `bKash ${payment.bkashTrxId ?? "-"}`;
+			: payment.paymentGateway === "stripe"
+				? "Card, via Stripe"
+				: `bKash ${payment.bkashTrxId ?? "-"}`;
 
 		const pdf = await buildInvoicePdf({
 			title: "Payment Receipt",
