@@ -25,6 +25,12 @@ const messListSelect = {
 	createdAt: true,
 	manager: { select: { id: true, name: true, email: true } },
 	_count: { select: { members: true, cycles: true } },
+	// Marks a mess whose month is still open (it can't be deleted yet).
+	cycles: {
+		where: { status: CycleStatus.OPEN },
+		select: { id: true },
+		take: 1,
+	},
 };
 
 const createMess = async (payload: ICreateMessPayload, user: RequestUser) => {
@@ -181,6 +187,9 @@ const getSingleMess = async (messId: string, user: RequestUser) => {
 					status: true,
 					mealRate: true,
 					totalMeals: true,
+					totalGrocery: true,
+					closedAt: true,
+					closedBy: { select: { name: true } },
 				},
 			},
 		},

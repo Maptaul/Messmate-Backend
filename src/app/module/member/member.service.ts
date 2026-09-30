@@ -19,6 +19,8 @@ const memberSelect = {
 	status: true,
 	joinedAt: true,
 	leftAt: true,
+	defaultLunch: true,
+	defaultDinner: true,
 	user: {
 		select: { id: true, name: true, email: true, phone: true, avatarUrl: true },
 	},

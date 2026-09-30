@@ -175,8 +175,12 @@ const getCycleExpenses = async (
 		andConditions.push({ type: query.type });
 	}
 
+	// "fund" = paid from the mess fund (no member).
 	if (query.paidByMemberId) {
-		andConditions.push({ paidByMemberId: query.paidByMemberId });
+		andConditions.push({
+			paidByMemberId:
+				query.paidByMemberId === "fund" ? null : query.paidByMemberId,
+		});
 	}
 
 	if (query.searchTerm) {

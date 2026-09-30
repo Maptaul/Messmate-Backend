@@ -82,7 +82,7 @@ non-numeric one falls back to the default), `?sortBy=` and
 `?sortOrder=asc|desc`. Where a search makes sense — messes, members, expenses,
 meals, users — `?searchTerm=` matches the relevant text fields
 case-insensitively. Domain filters are per endpoint: `?role=` and `?status=` on
-users, `?type=` on expenses, `?memberId=` on meals and deposits, `?action=` and
+users, `?type=` and `?paidByMemberId=` (`fund` = the mess fund) on expenses, `?memberId=` on meals and deposits, `?action=` and
 `?entity=` on audit logs.
 
 ---
