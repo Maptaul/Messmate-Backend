@@ -15,12 +15,14 @@ import { AppError } from "../../utils/AppError";
 import { writeAudit } from "../../utils/audit";
 import { checkMessAccess } from "../../utils/checkMessAccess";
 import type { IOpenCyclePayload } from "./cycle.interface";
+import { dhakaDateOnly } from "../cron/cron.service";
 import { sendBillsWithdrawn, sendCycleBills } from "./cycle.mail";
 import {
 	computeSettlement,
 	depositFundedGroceryWarning,
 	type SettlementMember,
 } from "./cycle.settlement";
+import { buildCycleTrends } from "./cycle.trends";
 
 const cycleSelect = {
 	id: true,
@@ -643,6 +645,97 @@ const reopenCycle = async (cycleId: string, user: RequestUser) => {
 	return reopened;
 };
 
+const getCycleTrends = async (cycleId: string, user: RequestUser) => {
+	const cycle = await prisma.billingCycle.findUnique({
+		where: { id: cycleId },
+		select: { id: true, year: true, month: true, messId: true },
+	});
+
+	if (!cycle) {
+		throw new AppError(httpStatus.NOT_FOUND, "Billing Cycle Not Found");
+	}
+
+	const membership = await checkMessAccess(cycle.messId, user);
+
+	// The month so far: from its first day to today, or to its last day.
+	const from = new Date(Date.UTC(cycle.year, cycle.month - 1, 1));
+	const monthEnd = new Date(Date.UTC(cycle.year, cycle.month, 0));
+	const today = dhakaDateOnly(new Date());
+	const to = today < from ? from : today > monthEnd ? monthEnd : today;
+
+	const [meals, expenses, previous] = await Promise.all([
+		prisma.mealEntry.findMany({
+			where: { cycleId, isDeleted: false },
+			select: { date: true, lunch: true, dinner: true, memberId: true },
+		}),
+		prisma.expense.findMany({
+			where: { cycleId, isDeleted: false },
+			select: { spentAt: true, type: true, amount: true },
+		}),
+		// What last month still owes is the manager's business, not a member's.
+		user.role === Role.MEMBER
+			? null
+			: prisma.billingCycle.findFirst({
+					where: {
+						messId: cycle.messId,
+						status: CycleStatus.CLOSED,
+						OR: [
+							{ year: { lt: cycle.year } },
+							{ year: cycle.year, month: { lt: cycle.month } },
+						],
+					},
+					orderBy: [{ year: "desc" }, { month: "desc" }],
+					select: {
+						id: true,
+						year: true,
+						month: true,
+						bills: {
+							select: {
+								createdAt: true,
+								totalPayable: true,
+								creditAmount: true,
+								payments: {
+									where: { status: PaymentStatus.PAID },
+									select: { amount: true, paidAt: true },
+								},
+							},
+						},
+					},
+				}),
+	]);
+
+	const trends = buildCycleTrends({
+		from,
+		to,
+		meals,
+		expenses: expenses.map((expense) => ({
+			spentAt: expense.spentAt,
+			type: expense.type,
+			amount: Number(expense.amount),
+		})),
+		memberId: membership?.id ?? null,
+		previousBills: previous
+			? previous.bills.map((bill) => ({
+					createdAt: bill.createdAt,
+					totalPayable: Number(bill.totalPayable),
+					creditAmount: Number(bill.creditAmount),
+					payments: bill.payments.map((payment) => ({
+						amount: Number(payment.amount),
+						paidAt: payment.paidAt,
+					})),
+				}))
+			: null,
+	});
+
+	return {
+		cycle: { id: cycle.id, year: cycle.year, month: cycle.month },
+		previousCycle: previous
+			? { id: previous.id, year: previous.year, month: previous.month }
+			: null,
+		...trends,
+	};
+};
+
 export const CycleServices = {
 	openCycle,
 	getMessCycles,
@@ -650,4 +743,5 @@ export const CycleServices = {
 	previewSettlement,
 	closeCycle,
 	reopenCycle,
+	getCycleTrends,
 };

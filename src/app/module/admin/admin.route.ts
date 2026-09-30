@@ -13,6 +13,12 @@ router.get(
 	AdminController.getDashboardStats,
 );
 
+router.get(
+	"/dashboard-trends",
+	auth(Role.ADMIN),
+	AdminController.getDashboardTrends,
+);
+
 router.get("/audit-logs", auth(Role.ADMIN), AdminController.getAuditLogs);
 
 router.get("/users", auth(Role.ADMIN), AdminController.getAllUsers);

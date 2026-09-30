@@ -22,6 +22,7 @@ import type {
 	IChangeRolePayload,
 	IChangeStatusPayload,
 } from "./admin.interface";
+import { buildPlatformTrends, weekEnds } from "./admin.trends";
 
 const userSelect = {
 	id: true,
@@ -379,6 +380,52 @@ const getDashboardStats = async () =>
 		};
 	});
 
+const getDashboardTrends = async () =>
+	cached(cacheKeys.dashboardTrends, DASHBOARD_CACHE_SECONDS, async () => {
+		const [users, messes, cycles, bills] = await Promise.all([
+			prisma.user.findMany({
+				where: { isDeleted: false },
+				select: { createdAt: true },
+			}),
+			prisma.mess.findMany({
+				where: { isDeleted: false },
+				select: { createdAt: true },
+			}),
+			prisma.billingCycle.findMany({
+				select: { createdAt: true, closedAt: true },
+			}),
+			prisma.memberBill.findMany({
+				select: {
+					createdAt: true,
+					totalPayable: true,
+					creditAmount: true,
+					payments: {
+						where: { status: PaymentStatus.PAID },
+						select: { amount: true, paidAt: true },
+					},
+				},
+			}),
+		]);
+
+		return buildPlatformTrends(
+			{
+				users: users.map((user) => user.createdAt),
+				messes: messes.map((mess) => mess.createdAt),
+				cycles,
+				bills: bills.map((bill) => ({
+					createdAt: bill.createdAt,
+					totalPayable: Number(bill.totalPayable),
+					creditAmount: Number(bill.creditAmount),
+					payments: bill.payments.map((payment) => ({
+						amount: Number(payment.amount),
+						paidAt: payment.paidAt,
+					})),
+				})),
+			},
+			weekEnds(new Date()),
+		);
+	});
+
 export const AdminServices = {
 	getAllUsers,
 	getSingleUser,
@@ -386,4 +433,5 @@ export const AdminServices = {
 	changeUserStatus,
 	getAuditLogs,
 	getDashboardStats,
+	getDashboardTrends,
 };

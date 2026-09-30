@@ -93,6 +93,20 @@ const reopenCycle = catchAsync(async (req: Request, res: Response) => {
 	});
 });
 
+const getCycleTrends = catchAsync(async (req: Request, res: Response) => {
+	const cycleId = req.params.cycleId as string;
+	const user = req.user!;
+
+	const result = await CycleServices.getCycleTrends(cycleId, user);
+
+	sendResponse(res, {
+		statusCode: httpStatus.OK,
+		success: true,
+		message: "Cycle Trends Retrieved Successfully",
+		data: result,
+	});
+});
+
 export const CycleController = {
 	openCycle,
 	getMessCycles,
@@ -100,4 +114,5 @@ export const CycleController = {
 	previewSettlement,
 	closeCycle,
 	reopenCycle,
+	getCycleTrends,
 };

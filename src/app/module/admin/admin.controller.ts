@@ -82,6 +82,17 @@ const getDashboardStats = catchAsync(async (_req: Request, res: Response) => {
 	});
 });
 
+const getDashboardTrends = catchAsync(async (_req: Request, res: Response) => {
+	const result = await AdminServices.getDashboardTrends();
+
+	sendResponse(res, {
+		statusCode: httpStatus.OK,
+		success: true,
+		message: "Dashboard Trends Retrieved Successfully",
+		data: result,
+	});
+});
+
 export const AdminController = {
 	getAllUsers,
 	getSingleUser,
@@ -89,4 +100,5 @@ export const AdminController = {
 	changeUserStatus,
 	getAuditLogs,
 	getDashboardStats,
+	getDashboardTrends,
 };

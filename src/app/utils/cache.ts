@@ -32,6 +32,7 @@ export const invalidateCache = async (key: string) => {
 
 export const cacheKeys = {
 	dashboardStats: "stats:dashboard",
+	dashboardTrends: "stats:dashboard-trends",
 	mealPlanCalendar: (cycleId: string) => `calendar:meal-plan:${cycleId}`,
 	groceryDutyCalendar: (cycleId: string) => `calendar:grocery-duty:${cycleId}`,
 };

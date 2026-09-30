@@ -3,7 +3,7 @@
 **Base URL:** `https://messmatebackend.vercel.app`
 **Local:** `http://localhost:5000`
 
-79 endpoints across 14 modules, all versioned under `/api/v1`. The runnable version of this reference is `postman/MessMate.postman_collection.json` — 125
+81 endpoints across 14 modules, all versioned under `/api/v1`. The runnable version of this reference is `postman/MessMate.postman_collection.json` — 125
 requests that chain their own tokens and ids.
 
 ---
@@ -141,6 +141,7 @@ users, `?type=` on expenses, `?memberId=` on meals and deposits, `?action=` and
 | POST | `/api/v1/cycle/open-cycle` | `ADMIN` `MESS_MANAGER` | yes |  |
 | GET | `/api/v1/cycle/mess-cycles/:messId` | `ADMIN` `MESS_MANAGER` `MEMBER` | — |  |
 | GET | `/api/v1/cycle/settlement-preview/:cycleId` | `ADMIN` `MESS_MANAGER` `MEMBER` | — | the bill if the month closed now; a member gets only their own line |
+| GET | `/api/v1/cycle/trends/:cycleId` | `ADMIN` `MESS_MANAGER` `MEMBER` | — | day-by-day meals, grocery and shared bills so far; see below |
 | POST | `/api/v1/cycle/close-cycle/:cycleId` | `ADMIN` `MESS_MANAGER` | — |  |
 | POST | `/api/v1/cycle/reopen-cycle/:cycleId` | `ADMIN` | — |  |
 | GET | `/api/v1/cycle/:cycleId` | `ADMIN` `MESS_MANAGER` `MEMBER` | — |  |
@@ -226,6 +227,7 @@ users, `?type=` on expenses, `?memberId=` on meals and deposits, `?action=` and
 | Method | Path | Roles | Validated | Notes |
 | --- | --- | --- | :-: | --- |
 | GET | `/api/v1/admin/dashboard-stats` | `ADMIN` | — |  |
+| GET | `/api/v1/admin/dashboard-trends` | `ADMIN` | — | seven weekly points for the overview's sparklines |
 | GET | `/api/v1/admin/audit-logs` | `ADMIN` | — |  |
 | GET | `/api/v1/admin/users` | `ADMIN` | — |  |
 | GET | `/api/v1/admin/users/:userId` | `ADMIN` | — |  |
@@ -265,6 +267,23 @@ line plus the same warnings close-cycle would return. Rent and the advance are
 charged in full, because that is what closing today would charge. On a closed
 cycle it answers `409` — the bills are final by then; read them from
 `/payment/my-bills` or `/payment/cycle-bills/:cycleId`.
+
+### Trends for the overview sparklines
+
+`GET /api/v1/cycle/trends/:cycleId` answers one value per day from the first
+of the month to today (or to the month's last day): `meals` eaten, `grocery`
+and `shared` bills (maid, gas, electricity, water, internet, other) spent that
+day, and `myMeals` — the caller's own meals, `null` when they don't eat in
+the mess. Values are per day, not running totals; a running meal rate is
+running grocery over running meals. For a manager or admin, `previousDue` is
+what the previous closed month still owed at the close of each Dhaka day, with
+`previousCycle` naming it; a member gets `null` for both.
+
+`GET /api/v1/admin/dashboard-trends` answers seven weekly points ending now:
+how many `users` and `messes` existed, how many billing cycles were open
+(`openCycles`) and the `outstandingDue` still owed on closed bills at each
+point — every value read from the records' own dates, cached for a minute like
+the stats.
 
 ### The personal finance tracker
 

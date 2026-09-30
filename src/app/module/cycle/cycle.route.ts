@@ -26,6 +26,12 @@ router.get(
 	CycleController.previewSettlement,
 );
 
+router.get(
+	"/trends/:cycleId",
+	auth(Role.ADMIN, Role.MESS_MANAGER, Role.MEMBER),
+	CycleController.getCycleTrends,
+);
+
 router.post(
 	"/close-cycle/:cycleId",
 	auth(Role.ADMIN, Role.MESS_MANAGER),
