@@ -34,19 +34,14 @@ const messListSelect = {
 };
 
 const createMess = async (payload: ICreateMessPayload, user: RequestUser) => {
-	const isNameTaken = await prisma.mess.findFirst({
-		where: {
-			name: payload.name,
-			managerId: user.userId,
-			isDeleted: false,
-		},
+	// A manager runs one mess. Deleting it frees them to start another.
+	const managedMess = await prisma.mess.findFirst({
+		where: { managerId: user.userId, isDeleted: false },
+		select: { id: true },
 	});
 
-	if (isNameTaken) {
-		throw new AppError(
-			httpStatus.CONFLICT,
-			"You Already Manage A Mess With This Name",
-		);
+	if (managedMess) {
+		throw new AppError(httpStatus.CONFLICT, "You Already Manage A Mess");
 	}
 
 	const mess = await prisma.$transaction(async (tx) => {
