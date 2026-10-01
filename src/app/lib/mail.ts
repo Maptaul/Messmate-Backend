@@ -16,6 +16,9 @@ export const sendTemplateMail = async (
 	data: Record<string, unknown>,
 	attachments?: MailAttachment[],
 ) => {
+	// The demo accounts live on .test (RFC 2606), which never delivers.
+	if (to.endsWith(".test")) return;
+
 	const templatePath = path.join(
 		process.cwd(),
 		`src/app/templates/${template}.ejs`,
