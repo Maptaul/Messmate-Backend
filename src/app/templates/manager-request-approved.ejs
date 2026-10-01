@@ -1,0 +1,18 @@
+<%- include('partials/email', {
+  tone: 'g',
+  icon: '✅',
+  preheader: 'Your request was approved. Log in again and create ' + messName + '.',
+  heading: 'You can now run ' + messName,
+  paras: [
+    'Hi ' + userName + ', an admin approved your request to run ' + messName + ' on MessMate.',
+    'Log in again and you’ll land on the manager dashboard. Create the mess in four steps, then add your members by the email they registered with.'
+  ],
+  steps: [
+    { k: 'Log in again', v: 'Your account is now a manager account.', good: true },
+    { k: 'Create your mess', v: 'Name, address, rent and the monthly advance.' },
+    { k: 'Add members', v: 'They plan meals and pay their bills themselves.' }
+  ],
+  cta: 'Log in to MessMate',
+  ctaHref: loginUrl,
+  why: 'You’re getting this because you asked to run a mess on MessMate.'
+}) %>

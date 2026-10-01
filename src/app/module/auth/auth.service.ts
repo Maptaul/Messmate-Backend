@@ -99,6 +99,8 @@ const registerUser = async (payload: IRegisterUserPayload) => {
 			password: hashedPassword,
 			phone: phone ?? null,
 			role: payload.role,
+			messName: payload.messName,
+			messAddress: payload.messAddress,
 		}),
 		{
 			expiration: {
@@ -161,10 +163,12 @@ const verifyUserEmail = async (payload: IVerifyEmailPayload) => {
 	const registrationPayload: IRegisterUserPayload & { phone: string | null } =
 		JSON.parse(redisUserData);
 
-	const role =
-		registrationPayload.role === "MESS_MANAGER"
-			? Role.MESS_MANAGER
-			: Role.MEMBER;
+	const { messName, messAddress } = registrationPayload;
+
+	// Everyone starts as a member. Asking to run a mess files a request that an
+	// admin approves; only then does the account become a manager.
+	const wantsToManage =
+		registrationPayload.role === "MESS_MANAGER" && !!messName && !!messAddress;
 
 	const createdUser = await prisma.user.create({
 		data: {
@@ -172,10 +176,13 @@ const verifyUserEmail = async (payload: IVerifyEmailPayload) => {
 			email: registrationPayload.email,
 			password: registrationPayload.password,
 			phone: registrationPayload.phone,
-			role,
+			role: Role.MEMBER,
 			status: UserStatus.ACTIVE,
 			authProvider: AuthProvider.CREDENTIAL,
 			emailVerified: true,
+			...(wantsToManage && {
+				managerApplications: { create: { messName, messAddress } },
+			}),
 		},
 		omit: { password: true },
 	});
@@ -185,6 +192,8 @@ const verifyUserEmail = async (payload: IVerifyEmailPayload) => {
 	await sendTemplateMail(email, "Welcome To MessMate", "member-welcome-email", {
 		userName: createdUser.name,
 		loginUrl: `${config.frontend_url}/login`,
+		managerPending: wantsToManage,
+		messName,
 	});
 
 	const { accessToken, refreshToken } = createAuthTokens(createdUser);
@@ -262,6 +271,20 @@ const getMe = async (user: IRequestUser) => {
 			managedMesses: {
 				where: { isDeleted: false },
 				select: { id: true, name: true, address: true, monthlyRent: true },
+			},
+			// The latest request to run a mess, if any.
+			managerApplications: {
+				orderBy: { createdAt: "desc" },
+				take: 1,
+				select: {
+					id: true,
+					status: true,
+					messName: true,
+					messAddress: true,
+					rejectionReason: true,
+					createdAt: true,
+					reviewedAt: true,
+				},
 			},
 		},
 	});

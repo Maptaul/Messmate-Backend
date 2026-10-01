@@ -297,3 +297,48 @@ test("money is always shown with two decimals", () => {
 	assert.equal(taka("853.9385"), "853.94");
 	assert.equal(taka(0), "0.00");
 });
+
+test("the welcome email points members to the manager request, and confirms one that was sent", async () => {
+	const base = { userName: "Arman", loginUrl: "https://messmate.test/login" };
+
+	const member = await render("member-welcome-email", base);
+	assert.match(member, /Ask to become a manager from your profile/);
+	assert.doesNotMatch(member, /Create it in four steps/);
+
+	const applicant = await render("member-welcome-email", {
+		...base,
+		managerPending: true,
+		messName: "Green View Mess",
+	});
+	assert.match(applicant, /Your request to run Green View Mess is with the admin/);
+});
+
+test("a reviewed manager request says what happened and what to do next", async () => {
+	const base = {
+		userName: "Arman",
+		messName: "Green View Mess",
+		loginUrl: "https://messmate.test/login",
+	};
+
+	const approved = await render("manager-request-approved", base);
+	assert.match(approved, /You can now run Green View Mess/);
+	assert.match(approved, /Log in again/);
+	assert.match(approved, /https:\/\/messmate\.test\/login/);
+
+	const rejected = await render("manager-request-rejected", {
+		...base,
+		reason: "We could not find this address",
+	});
+	assert.match(rejected, /wasn’t approved/);
+	assert.match(rejected, /Reason: We could not find this address/);
+});
+
+test("names in a manager request email are escaped", async () => {
+	const html = await render("manager-request-approved", {
+		userName: "Arman",
+		messName: "<b>Green</b>",
+		loginUrl: "https://messmate.test/login",
+	});
+	assert.doesNotMatch(html, /<b>Green<\/b>/);
+	assert.match(html, /&lt;b&gt;Green&lt;\/b&gt;/);
+});

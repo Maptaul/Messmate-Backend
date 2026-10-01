@@ -1,0 +1,15 @@
+<%- include('partials/email', {
+  tone: 'r',
+  icon: '✋',
+  preheader: 'Your request to run ' + messName + ' wasn’t approved this time.',
+  heading: 'Your request to run ' + messName + ' wasn’t approved',
+  paras: [
+    'Hi ' + userName + ', an admin reviewed your request to run ' + messName + ' and couldn’t approve it this time.',
+    'You can keep using MessMate as a member. When you’re ready, send a new request from your profile.'
+  ],
+  note: 'Reason: ' + reason,
+  noteTone: 'r',
+  cta: 'Open MessMate',
+  ctaHref: loginUrl,
+  why: 'You’re getting this because you asked to run a mess on MessMate.'
+}) %>

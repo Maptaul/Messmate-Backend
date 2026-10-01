@@ -1,3 +1,9 @@
+<%
+  var pending = locals.managerPending;
+  var runLine = pending
+    ? 'Your request to run ' + locals.messName + ' is with the admin. We’ll email you when it’s reviewed — until then you can use MessMate as a member.'
+    : 'Running a mess yourself? Ask to become a manager from your profile, and an admin will review it.';
+%>
 <%- include('partials/email', {
   tone: 'g',
   icon: '🏠',
@@ -5,7 +11,8 @@
   heading: 'Welcome to MessMate',
   paras: [
     'Hi ' + userName + ', your account is ready.',
-    'Once your manager adds your email to the mess, you can plan tomorrow’s meals before 11 PM, read the shared ledger and pay your bill by card or bKash. Running a mess yourself? Create it in four steps and add your members.'
+    'Once your manager adds your email to the mess, you can plan tomorrow’s meals before 11 PM, read the shared ledger and pay your bill by card or bKash.',
+    runLine
   ],
   rows: [
     { k: 'Plan cutoff', v: '11:00 PM the night before' },

@@ -6,6 +6,8 @@ export interface IRegisterUserPayload {
 	password: string;
 	phone?: string;
 	role?: "MESS_MANAGER" | "MEMBER";
+	messName?: string;
+	messAddress?: string;
 }
 
 export interface IVerifyEmailPayload {

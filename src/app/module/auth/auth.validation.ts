@@ -1,4 +1,8 @@
 import z from "zod";
+import {
+	messAddressSchema,
+	messNameSchema,
+} from "../managerRequest/managerRequest.validation";
 
 const passwordSchema = z
 	.string()
@@ -8,19 +12,43 @@ const passwordSchema = z
 	.regex(/[0-9]/, "Password must contain atleast 1 Number")
 	.regex(/[^A-Za-z0-9]/, "Password must contain atleast 1 Special Character");
 
-const RegisterUserZodSchema = z.object({
-	name: z
-		.string("Name Must Be A String")
-		.min(3, "Name must atleast 3 characters long!!!")
-		.max(120, "Name Is Too Long"),
-	email: z.email("Not a valid email"),
-	password: passwordSchema,
-	phone: z.string().max(20, "Phone Number Is Too Long").optional(),
+const RegisterUserZodSchema = z
+	.object({
+		name: z
+			.string("Name Must Be A String")
+			.min(3, "Name must atleast 3 characters long!!!")
+			.max(120, "Name Is Too Long"),
+		email: z.email("Not a valid email"),
+		password: passwordSchema,
+		phone: z.string().max(20, "Phone Number Is Too Long").optional(),
 
-	role: z
-		.enum(["MESS_MANAGER", "MEMBER"], "Role Must Be MESS_MANAGER Or MEMBER")
-		.optional(),
-});
+		role: z
+			.enum(["MESS_MANAGER", "MEMBER"], "Role Must Be MESS_MANAGER Or MEMBER")
+			.optional(),
+
+		// Asking to run a mess sends these to an admin, who approves the request.
+		messName: messNameSchema.optional(),
+		messAddress: messAddressSchema.optional(),
+	})
+	.superRefine((value, ctx) => {
+		if (value.role !== "MESS_MANAGER") return;
+
+		if (!value.messName) {
+			ctx.addIssue({
+				code: "custom",
+				path: ["messName"],
+				message: "Mess Name Is Required To Run A Mess",
+			});
+		}
+
+		if (!value.messAddress) {
+			ctx.addIssue({
+				code: "custom",
+				path: ["messAddress"],
+				message: "Address Is Required To Run A Mess",
+			});
+		}
+	});
 
 const VerifyEmailZodSchema = z.object({
 	email: z.email("Not a valid email"),

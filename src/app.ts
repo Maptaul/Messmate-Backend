@@ -21,6 +21,7 @@ import { ExpenseRoutes } from "./app/module/expense/expense.route";
 import { FinanceRoutes } from "./app/module/finance/finance.route";
 import { GroceryDutyRoutes } from "./app/module/groceryDuty/groceryDuty.route";
 import { MealRoutes } from "./app/module/meal/meal.route";
+import { ManagerRequestRoutes } from "./app/module/managerRequest/managerRequest.route";
 import { MealPlanRoutes } from "./app/module/mealPlan/mealPlan.route";
 import { MemberRoutes } from "./app/module/member/member.route";
 import { MessRoutes } from "./app/module/mess/mess.route";
@@ -70,6 +71,7 @@ app.use("/api/v1/deposit", DepositRoutes);
 app.use("/api/v1/payment", PaymentRoutes);
 app.use("/api/v1/finance", FinanceRoutes);
 app.use("/api/v1/admin", AdminRoutes);
+app.use("/api/v1/manager-request", ManagerRequestRoutes);
 app.use("/api/v1/cron", CronRoutes);
 
 app.get("/", async (_req: Request, res: Response) => {
