@@ -1,43 +1,14 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Your <%= monthName %> bill is being recalculated</title>
-  <style>
-    body { margin: 0; padding: 0; background: #f4f8fb; color: #263746; font-family: Arial, sans-serif; }
-    .wrapper { width: 100%; padding: 32px 0; }
-    .card { width: 92%; max-width: 600px; margin: 0 auto; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 18px rgba(25, 65, 90, .08); }
-    .header { padding: 28px 36px; background: #087f8c; color: #fff; }
-    .brand { margin: 0; font-size: 24px; font-weight: bold; }
-    .content { padding: 36px; line-height: 1.6; }
-    h1 { margin: 0 0 16px; color: #123c4a; font-size: 26px; }
-    p { margin: 0 0 18px; }
-    .old { padding: 14px 18px; margin: 0 0 20px; border-radius: 8px; background: #f7fafb; color: #71808a; }
-    .old strong { color: #55707d; text-decoration: line-through; }
-    .footer { padding: 22px 36px; background: #f7fafb; color: #71808a; font-size: 13px; }
-    @media screen and (max-width: 480px) { .content, .header, .footer { padding: 26px 22px; } h1 { font-size: 22px; } }
-  </style>
-</head>
-<body>
-  <div class="wrapper">
-    <div class="card">
-      <header class="header">
-        <p class="brand">MessMate</p>
-      </header>
-      <main class="content">
-        <h1>Ignore your <%= monthName %> bill for now</h1>
-        <p>Hi <%= userName || 'there' %>, the manager has reopened <strong><%= monthName %> <%= year %></strong> at <strong><%= messName %></strong> to correct something in the month's records.</p>
-        <p class="old">The bill you were sent — <strong>BDT <%= previousDue %></strong> — no longer stands.</p>
-        <p>Nothing is owed against it while the month is open. You will get a fresh bill as soon as the manager closes it again.</p>
-        <p>If you have already paid, that payment is safe and will be counted on the new bill.</p>
-        <p>Warm regards,<br><strong>The MessMate Team</strong></p>
-      </main>
-      <footer class="footer">
-        <p>This is an automated message. Please do not reply to this email.</p>
-        <p>&copy; <%= new Date().getFullYear() %> MessMate. All rights reserved.</p>
-      </footer>
-    </div>
-  </div>
-</body>
-</html>
+<%- include('partials/email', {
+  tone: 'r',
+  icon: '↺',
+  messLine: messName,
+  preheader: 'The month was reopened for a correction. A new bill follows when it closes.',
+  heading: monthName + ' ' + year + ' was reopened',
+  paras: [
+    'Hi ' + userName + ', an admin reopened ' + monthName + ' ' + year + ' for ' + messName + ' so the manager can fix an entry. Your ' + monthName + ' bill of ৳' + previousDue + ' is withdrawn — you don’t need to pay it.',
+    'You’ll get a new bill by email when the month closes again.'
+  ],
+  note: 'Nothing was charged. Bills with a payment can’t be withdrawn.',
+  noteTone: 'b',
+  why: 'Sent to every member when a closed month is reopened.'
+}) %>

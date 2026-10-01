@@ -1,103 +1,42 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Your bill for <%= monthName %> <%= year %></title>
-  <style>
-    body { margin: 0; padding: 0; background: #f4f8fb; color: #263746; font-family: Arial, sans-serif; }
-    .wrapper { width: 100%; padding: 32px 0; }
-    .card { width: 92%; max-width: 620px; margin: 0 auto; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 18px rgba(25, 65, 90, .08); }
-    .header { padding: 28px 36px; background: #087f8c; color: #fff; }
-    .brand { margin: 0; font-size: 24px; font-weight: bold; }
-    .content { padding: 36px; line-height: 1.6; }
-    h1 { margin: 0 0 8px; color: #123c4a; font-size: 26px; }
-    .lead { margin: 0 0 24px; color: #55707d; }
-    .rate { padding: 14px 18px; margin: 0 0 24px; border-radius: 8px; background: #eef7f8; color: #0a5b64; text-align: center; }
-    h2 { margin: 28px 0 10px; font-size: 15px; color: #71808a; font-weight: normal; text-transform: uppercase; letter-spacing: .04em; }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { padding: 10px 0; text-align: left; border-bottom: 1px solid #eef2f4; font-size: 15px; }
-    th { color: #55707d; font-weight: normal; }
-    td { text-align: right; font-weight: bold; color: #123c4a; }
-    tr.total th, tr.total td { border-bottom: 2px solid #dfe7ea; font-size: 16px; }
-    tr.total th { color: #123c4a; font-weight: bold; }
-    .owes { display: block; padding: 18px 20px; margin: 24px 0 8px; border-radius: 8px; background: #fdf1f2; color: #8a1f2b; font-size: 24px; font-weight: bold; text-align: center; }
-    .owed { display: block; padding: 18px 20px; margin: 24px 0 8px; border-radius: 8px; background: #eef8f2; color: #137a4b; font-size: 24px; font-weight: bold; text-align: center; }
-    .clear { display: block; padding: 18px 20px; margin: 24px 0 8px; border-radius: 8px; background: #f2f5f6; color: #55707d; font-size: 20px; font-weight: bold; text-align: center; }
-    .note { margin: 0 0 20px; color: #71808a; font-size: 14px; text-align: center; }
-    .button { display: inline-block; margin: 8px 0 20px; padding: 13px 24px; border-radius: 6px; background: #087f8c; color: #fff !important; text-decoration: none; font-weight: bold; }
-    .footer { padding: 22px 36px; background: #f7fafb; color: #71808a; font-size: 13px; }
-    @media screen and (max-width: 480px) { .content, .header, .footer { padding: 26px 22px; } h1 { font-size: 22px; } }
-  </style>
-</head>
-<body>
-  <div class="wrapper">
-    <div class="card">
-      <header class="header">
-        <p class="brand">MessMate</p>
-      </header>
-      <main class="content">
-        <h1><%= monthName %> <%= year %></h1>
-        <p class="lead">Hi <%= userName || 'there' %>, <strong><%= messName %></strong> has closed the month. Here is your share.</p>
-
-        <p class="rate">
-          The mess spent <strong>BDT <%= totalGrocery %></strong> on groceries over
-          <strong><%= totalMeals %></strong> meals.<br>
-          That makes this month's meal rate <strong>BDT <%= mealRate %></strong> per meal.
-        </p>
-
-        <h2>What you owe</h2>
-        <table>
-          <% if (hasOpeningBalance) { %>
-            <tr><th><%= openingWasOwed ? 'Brought forward from last month' : 'In credit from last month' %></th><td>BDT <%= openingWasOwed ? '' : '- ' %><%= openingBalance %></td></tr>
-          <% } %>
-          <tr><th>Your meals</th><td><%= mealCount %></td></tr>
-          <tr><th>Meal cost (<%= mealCount %> &times; <%= mealRate %>)</th><td>BDT <%= mealCost %></td></tr>
-          <% sharedLines.forEach(function (line) { %>
-            <tr><th><%= line.label %></th><td>BDT <%= line.amount %></td></tr>
-          <% }); %>
-          <% if (sharedLines.length === 0) { %>
-            <tr><th>Utilities and other shared bills</th><td>BDT <%= sharedCost %></td></tr>
-          <% } %>
-          <tr><th>Rent share</th><td>BDT <%= rentShare %></td></tr>
-          <% if (hasAdvance) { %>
-            <tr><th>Next month's deposit</th><td>BDT <%= advanceCharged %></td></tr>
-          <% } %>
-          <tr class="total"><th>Total payable</th><td>BDT <%= totalPayable %></td></tr>
-        </table>
-
-        <h2>What you already put in</h2>
-        <table>
-          <% if (hasDeposit) { %>
-            <tr><th>Deposit</th><td>BDT <%= depositTotal %></td></tr>
-          <% } %>
-          <% if (hasPaidExpense) { %>
-            <tr><th>Bazaar you paid for yourself</th><td>BDT <%= paidExpenseTotal %></td></tr>
-          <% } %>
-          <tr class="total"><th>Total credit</th><td>BDT <%= creditAmount %></td></tr>
-        </table>
-
-        <% if (owes) { %>
-          <strong class="owes">You owe BDT <%= dueAmount %></strong>
-          <p class="note">Pay it with bKash from your bills page, or hand it to the manager.</p>
-          <% if (loginUrl) { %>
-            <p style="text-align:center"><a class="button" href="<%= loginUrl %>">Pay my bill</a></p>
-          <% } %>
-        <% } else if (isOwed) { %>
-          <strong class="owed">The mess owes you BDT <%= refundAmount %></strong>
-          <p class="note">You paid for more groceries than you ate this month. Collect it from the manager.</p>
-        <% } else { %>
-          <strong class="clear">You are all square &mdash; nothing owed either way.</strong>
-        <% } %>
-
-        <p>If any of this looks wrong, tell your manager before the month is settled. The register and every expense are readable by the whole mess.</p>
-        <p>Warm regards,<br><strong>The MessMate Team</strong></p>
-      </main>
-      <footer class="footer">
-        <p>This is an automated message. Please do not reply to this email.</p>
-        <p>&copy; <%= new Date().getFullYear() %> MessMate. All rights reserved.</p>
-      </footer>
-    </div>
-  </div>
-</body>
-</html>
+<%
+  var period = monthName + ' ' + year;
+  var rows = [{ k: 'Meals ' + mealCount + ' × ৳' + mealRate, v: '৳' + mealCost }];
+  if (sharedLines.length) {
+    sharedLines.forEach(function (line) {
+      rows.push({ k: line.label, v: '৳' + line.amount });
+    });
+  } else {
+    rows.push({ k: 'Utilities and other shared bills', v: '৳' + sharedCost });
+  }
+  rows.push({ k: 'Rent share', v: '৳' + rentShare });
+  if (hasAdvance) rows.push({ k: 'Next month’s deposit', v: '৳' + advanceCharged });
+  if (hasOpeningBalance) {
+    rows.push(openingWasOwed
+      ? { k: 'Brought forward from last month', v: '৳' + openingBalance }
+      : { k: 'In credit from last month', v: '−৳' + openingBalance, credit: true });
+  }
+  rows.push({ k: 'Total payable', v: '৳' + totalPayable, strong: true });
+  if (hasDeposit) rows.push({ k: 'Deposits', v: '−৳' + depositTotal, credit: true });
+  if (hasPaidExpense) rows.push({ k: 'Bazar you paid', v: '−৳' + paidExpenseTotal, credit: true });
+  rows.push(owes
+    ? { k: 'Due', v: '৳' + dueAmount, strong: true }
+    : isOwed
+      ? { k: 'The mess owes you', v: '৳' + refundAmount, strong: true, credit: true }
+      : { k: 'Due', v: '৳0.00', strong: true, credit: true });
+%>
+<%- include('partials/email', {
+  tone: 'b',
+  icon: '🧾',
+  messLine: messName,
+  preheader: 'Meal rate ৳' + mealRate + ' · ' + mealCount + ' meals. Pay by card or bKash.',
+  heading: period + ' is closed',
+  paras: ['Hi ' + userName + ', the meal rate came to ৳' + mealRate + ' (৳' + totalGrocery + ' bazar ÷ ' + totalMeals + ' meals). Here’s your share. The itemised PDF is attached.'],
+  big: owes ? '৳' + dueAmount : isOwed ? '৳' + refundAmount : '৳0.00',
+  bigLabel: owes ? 'Amount due' : isOwed ? 'The mess owes you' : 'Settled',
+  bigTone: owes ? 'a' : 'g',
+  rows: rows,
+  cta: owes ? 'Pay ৳' + dueAmount : 'Open MessMate',
+  ctaHref: loginUrl,
+  cta2: owes ? 'Paying cash? Hand it to your manager — they record it.' : '',
+  why: 'Sent to every member when a month closes.'
+}) %>

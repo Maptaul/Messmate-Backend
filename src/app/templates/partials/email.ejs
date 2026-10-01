@@ -1,0 +1,149 @@
+<%#
+  The shared MessMate email: a 600px table on a warm grey canvas, a white card
+  with a coloured top rule, an icon tile, the heading and body, then any of a
+  code box, a big amount, a rows table, two step tiles, a button, a note.
+  Every style is inline so mail clients keep it.
+
+  Locals: tone, icon, preheader, heading, paras[], messLine?, code?, codeNote?,
+  big?, bigLabel?, bigTone?, rows?[{ k, v, strong?, credit? }],
+  steps?[{ k, v, n?, good? }], cta?, ctaHref?, cta2?, cta2Href?, note?,
+  noteTone?, why
+%>
+<%
+  var TONES = {
+    g: { bg: '#E2F4EA', fg: '#0E6B3B', rule: '#1F9E5A' },
+    a: { bg: '#FBEFD2', fg: '#7A5200', rule: '#B57A00' },
+    r: { bg: '#FCE4E7', fg: '#97132A', rule: '#D6334A' },
+    b: { bg: '#DDEBFA', fg: '#0F4A9E', rule: '#2A6FDB' },
+    n: { bg: '#F4F4F0', fg: '#3D434C', rule: '#0B0D10' }
+  };
+  var look = TONES[tone] || TONES.n;
+  var noteLook = TONES[locals.noteTone || 'n'] || TONES.n;
+  var bigLook = TONES[locals.bigTone || 'n'] || TONES.n;
+  var font = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Anek Bangla', 'Noto Sans Bengali', Arial, sans-serif";
+  var mono = "'SFMono-Regular', Menlo, Consolas, 'Liberation Mono', monospace";
+%>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light">
+  <title><%= heading %></title>
+</head>
+<body style="margin:0;padding:0;background:#F4F4F0;">
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;"><%= preheader %></div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#F4F4F0;">
+    <tr>
+      <td align="center" style="padding:28px 12px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;font-family:<%- font %>;color:#0B0D10;">
+          <tr>
+            <td style="padding:0 4px 14px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="font-size:15px;font-weight:600;">
+                    <span style="display:inline-block;width:26px;height:26px;line-height:26px;border-radius:7px;background:#0E6B3B;color:#FFFFFF;text-align:center;font-size:14px;font-weight:700;vertical-align:middle;">M</span>
+                    <span style="vertical-align:middle;margin-left:8px;"><span style="color:#1E2A44;">Mess</span><span style="color:#1F9E5A;">Mate</span></span>
+                  </td>
+                  <% if (locals.messLine) { %>
+                    <td align="right" style="font-size:12px;color:#6F7680;"><%= messLine %></td>
+                  <% } %>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="background:#FFFFFF;border:1px solid #E1E3E7;border-radius:12px;overflow:hidden;">
+              <div style="height:4px;background:<%= look.rule %>;line-height:4px;font-size:0;">&nbsp;</div>
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="padding:32px 32px 28px;">
+                    <div style="width:44px;height:44px;line-height:44px;border-radius:11px;background:<%= look.bg %>;color:<%= look.fg %>;text-align:center;font-size:22px;"><%= icon %></div>
+                    <h1 style="margin:16px 0 0;font-size:24px;line-height:1.3;font-weight:600;letter-spacing:-0.02em;color:#0B0D10;"><%= heading %></h1>
+                    <% (locals.paras || []).forEach(function (para) { %>
+                      <p style="margin:14px 0 0;font-size:15px;line-height:1.6;color:#3D434C;"><%= para %></p>
+                    <% }) %>
+
+                    <% if (locals.code) { %>
+                      <div style="margin-top:18px;padding:18px;border-radius:14px;background:#F4F4F0;border:1px solid #E1E3E7;text-align:center;">
+                        <div style="font-family:<%- mono %>;font-size:34px;font-weight:600;letter-spacing:0.3em;padding-left:0.3em;color:#0B0D10;"><%= code %></div>
+                        <% if (locals.codeNote) { %>
+                          <div style="margin-top:6px;font-size:12.5px;color:#6F7680;"><%= codeNote %></div>
+                        <% } %>
+                      </div>
+                    <% } %>
+
+                    <% if (locals.big) { %>
+                      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:18px;border-radius:14px;background:<%= bigLook.bg %>;">
+                        <tr>
+                          <td style="padding:14px 16px;font-size:14px;color:#3D434C;"><%= bigLabel %></td>
+                          <td align="right" style="padding:14px 16px;font-size:28px;font-weight:600;letter-spacing:-0.02em;color:#0B0D10;white-space:nowrap;"><%= big %></td>
+                        </tr>
+                      </table>
+                    <% } %>
+
+                    <% if (locals.steps && steps.length) { %>
+                      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:18px;">
+                        <tr>
+                          <% steps.forEach(function (step, index) { %>
+                            <td width="<%= Math.floor(100 / steps.length) %>%" style="<%= index > 0 ? 'padding-left:10px;' : '' %>">
+                              <div style="padding:14px;border:1px solid #E1E3E7;border-radius:14px;">
+                                <div style="font-size:12.5px;color:#6F7680;"><%= step.k %></div>
+                                <div style="font-size:24px;font-weight:600;color:#0B0D10;"><%= step.v %></div>
+                                <% if (step.n) { %>
+                                  <div style="font-size:12px;color:<%= step.good ? '#0E6B3B' : '#6F7680' %>;"><%= step.n %></div>
+                                <% } %>
+                              </div>
+                            </td>
+                          <% }) %>
+                        </tr>
+                      </table>
+                    <% } %>
+
+                    <% if (locals.rows && rows.length) { %>
+                      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:18px;border:1px solid #E1E3E7;border-radius:14px;border-collapse:separate;overflow:hidden;">
+                        <% rows.forEach(function (row, index) { %>
+                          <tr style="background:<%= row.strong ? '#F4F4F0' : '#FFFFFF' %>;">
+                            <td style="padding:10px 14px;font-size:14px;color:#3D434C;font-weight:<%= row.strong ? 600 : 400 %>;<%= index < rows.length - 1 ? 'border-bottom:1px solid #EDEEF0;' : '' %>"><%= row.k %></td>
+                            <td align="right" style="padding:10px 14px;font-size:14px;color:<%= row.credit ? '#0E6B3B' : '#0B0D10' %>;font-weight:<%= row.strong ? 600 : 400 %>;<%= index < rows.length - 1 ? 'border-bottom:1px solid #EDEEF0;' : '' %>"><%= row.v %></td>
+                          </tr>
+                        <% }) %>
+                      </table>
+                    <% } %>
+
+                    <% if (locals.cta) { %>
+                      <a href="<%= ctaHref %>" style="display:block;margin-top:20px;height:46px;line-height:46px;border-radius:10px;background:#0E6B3B;color:#FFFFFF;font-size:15px;font-weight:500;text-align:center;text-decoration:none;"><%= cta %></a>
+                    <% } %>
+                    <% if (locals.cta2) { %>
+                      <p style="margin:10px 0 0;text-align:center;font-size:13.5px;">
+                        <% if (locals.cta2Href) { %>
+                          <a href="<%= cta2Href %>" style="color:#0E6B3B;font-weight:500;text-decoration:none;"><%= cta2 %></a>
+                        <% } else { %>
+                          <span style="color:#0E6B3B;font-weight:500;"><%= cta2 %></span>
+                        <% } %>
+                      </p>
+                    <% } %>
+
+                    <% if (locals.note) { %>
+                      <div style="margin-top:18px;padding:12px 14px;border-radius:14px;background:<%= noteLook.bg %>;color:<%= noteLook.fg %>;font-size:13.5px;line-height:1.5;"><%= locals.noteTone === 'r' ? '⚠' : 'ⓘ' %>&nbsp; <%= note %></div>
+                    <% } %>
+
+                    <p style="margin:20px 0 0;font-size:13.5px;line-height:1.6;color:#6F7680;">— The MessMate team. Reply to this email if something looks wrong.</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding:16px 8px 0;font-size:12px;line-height:1.6;color:#6F7680;">
+              <div><%= why %></div>
+              <div>MessMate · Dhaka, Bangladesh</div>
+              <div>&copy; <%= new Date().getFullYear() %> MessMate</div>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

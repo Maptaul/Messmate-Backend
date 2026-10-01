@@ -54,17 +54,18 @@ test("the monthly bill shows a member what they owe", async () => {
 		dueAmount: "420.50",
 	});
 
-	assert.match(html, /August 2026/);
-	assert.match(html, /You owe BDT 420\.50/);
-	assert.match(html, /Pay my bill/);
+	assert.match(html, /August 2026 is closed/);
+	assert.match(html, /Amount due/);
+	assert.match(html, /Pay ৳420\.50/);
 	assert.doesNotMatch(html, /mess owes you/);
 });
 
 test("the monthly bill shows a member what they are owed back", async () => {
 	const html = await render("monthly-bill", billBase);
 
-	assert.match(html, /The mess owes you BDT 761\.06/);
-	assert.doesNotMatch(html, /You owe BDT/);
+	assert.match(html, /The mess owes you/);
+	assert.match(html, /৳761\.06/);
+	assert.doesNotMatch(html, /Amount due/);
 });
 
 test("the monthly bill says so when nothing is owed either way", async () => {
@@ -74,7 +75,8 @@ test("the monthly bill says so when nothing is owed either way", async () => {
 		isOwed: false,
 	});
 
-	assert.match(html, /all square/);
+	assert.match(html, /Settled/);
+	assert.doesNotMatch(html, /Amount due/);
 });
 
 test("the monthly bill explains where the meal rate came from", async () => {
@@ -99,9 +101,8 @@ test("the bill itemises khala and utilities the way the paper sheet does", async
 test("the bill separates the deposit from the bazaar a member paid", async () => {
 	const html = await render("monthly-bill", billBase);
 
-	assert.match(html, /Deposit<\/th><td>BDT 600\.00/);
-	assert.match(html, /Bazaar you paid for yourself<\/th><td>BDT 1,015\.00/);
-	assert.match(html, /Total credit<\/th><td>BDT 1,615\.00/);
+	assert.match(html, /Deposits<\/td>[\s\S]*?−৳600\.00/);
+	assert.match(html, /Bazar you paid<\/td>[\s\S]*?−৳1,015\.00/);
 });
 
 test("the bill falls back to one shared line when nothing is itemised", async () => {
@@ -114,13 +115,13 @@ test("the bill falls back to one shared line when nothing is itemised", async ()
 
 	assert.match(html, /Utilities and other shared bills/);
 	assert.doesNotMatch(html, /Khala/);
-	assert.doesNotMatch(html, />Deposit</);
+	assert.doesNotMatch(html, />Deposits</);
 });
 
 test("the bill charges next month's deposit as its own line", async () => {
 	const html = await render("monthly-bill", billBase);
 
-	assert.match(html, /Next month's deposit<\/th><td>BDT 600\.00/);
+	assert.match(html, /Next month’s deposit<\/td>[\s\S]*?৳600\.00/);
 });
 
 test("a member who owed last month sees it brought forward", async () => {
@@ -131,7 +132,7 @@ test("a member who owed last month sees it brought forward", async () => {
 		openingBalance: "387.00",
 	});
 
-	assert.match(html, /Brought forward from last month<\/th><td>BDT 387\.00/);
+	assert.match(html, /Brought forward from last month<\/td>[\s\S]*?৳387\.00/);
 	assert.doesNotMatch(html, /In credit from last month/);
 });
 
@@ -143,7 +144,7 @@ test("a member the mess owed sees it as a credit, not a charge", async () => {
 		openingBalance: "761.06",
 	});
 
-	assert.match(html, /In credit from last month<\/th><td>BDT - 761\.06/);
+	assert.match(html, /In credit from last month<\/td>[\s\S]*?−৳761\.06/);
 	assert.doesNotMatch(html, /Brought forward/);
 });
 
@@ -154,7 +155,7 @@ test("a mess that takes no deposit sees neither extra line", async () => {
 		hasOpeningBalance: false,
 	});
 
-	assert.doesNotMatch(html, /Next month's deposit/);
+	assert.doesNotMatch(html, /Next month’s deposit/);
 	assert.doesNotMatch(html, /last month/);
 });
 
@@ -176,10 +177,10 @@ test("the payment receipt confirms a fully settled bill", async () => {
 		paidAt: "2026-09-01",
 	});
 
-	assert.match(html, /BDT 1,230\.00/);
+	assert.match(html, /৳1,230\.00/);
 	assert.match(html, /BKASH123XYZ/);
-	assert.match(html, /fully settled/);
-	assert.doesNotMatch(html, /still outstanding/);
+	assert.match(html, /is now settled/);
+	assert.doesNotMatch(html, /still due/);
 });
 
 test("the payment receipt reports what is left after a part payment", async () => {
@@ -200,8 +201,8 @@ test("the payment receipt reports what is left after a part payment", async () =
 		paidAt: "2026-09-01",
 	});
 
-	assert.match(html, /BDT 730\.00 is still outstanding/);
-	assert.doesNotMatch(html, /fully settled/);
+	assert.match(html, /৳730\.00 is still due/);
+	assert.doesNotMatch(html, /is now settled/);
 });
 
 test("the receipt reads differently when the manager took cash", async () => {
@@ -236,10 +237,10 @@ test("reopening a cycle tells members their bill no longer stands", async () => 
 		previousDue: "3,418.28",
 	});
 
-	assert.match(html, /Ignore your August bill/);
-	assert.match(html, /BDT 3,418\.28/);
-	assert.match(html, /no longer stands/);
-	assert.match(html, /already paid, that payment is safe/);
+	assert.match(html, /August 2026 was reopened/);
+	assert.match(html, /৳3,418\.28 is withdrawn/);
+	assert.match(html, /don’t need to pay it/);
+	assert.match(html, /Nothing was charged/);
 });
 
 test("the reminder templates still render", async () => {
@@ -259,8 +260,9 @@ test("the reminder templates still render", async () => {
 		loginUrl: "https://example.test/login",
 	});
 
-	assert.match(plan, /2026-09-11/);
-	assert.match(unpaid, /BDT 420\.50/);
+	assert.match(plan, /Friday 11 September/);
+	assert.match(plan, /11:00 PM/);
+	assert.match(unpaid, /৳420\.50/);
 });
 
 test("the headcount tells the manager what to cook and who was a default", async () => {
@@ -276,11 +278,11 @@ test("the headcount tells the manager what to cook and who was a default", async
 		],
 	});
 
-	assert.match(html, /Meals for 2026-09-18/);
-	assert.match(html, /Lunch<strong>7.5<\/strong>/);
-	assert.match(html, /Dinner<strong>8<\/strong>/);
-	assert.match(html, /Arman <span class="tag">\(default\)<\/span>/);
-	assert.doesNotMatch(html, /Tarak <span class="tag">/);
+	assert.match(html, /Friday 18 Sept — who’s eating/);
+	assert.match(html, /Lunch<\/div>\s*<div[^>]*>7\.5</);
+	assert.match(html, /Dinner<\/div>\s*<div[^>]*>8</);
+	assert.match(html, /L 0\.5 · D 1 · default/);
+	assert.match(html, /L 1 · D 1 · planned/);
 });
 
 test("month numbers become month names", () => {

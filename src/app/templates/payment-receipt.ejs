@@ -1,68 +1,27 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Payment received</title>
-  <style>
-    body { margin: 0; padding: 0; background: #f4f8fb; color: #263746; font-family: Arial, sans-serif; }
-    .wrapper { width: 100%; padding: 32px 0; }
-    .card { width: 92%; max-width: 600px; margin: 0 auto; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 18px rgba(25, 65, 90, .08); }
-    .header { padding: 28px 36px; background: #087f8c; color: #fff; }
-    .brand { margin: 0; font-size: 24px; font-weight: bold; }
-    .content { padding: 36px; line-height: 1.6; }
-    h1 { margin: 0 0 8px; color: #123c4a; font-size: 26px; }
-    .lead { margin: 0 0 24px; color: #55707d; }
-    .paid { display: block; padding: 18px 20px; margin: 0 0 24px; border-radius: 8px; background: #eef8f2; color: #137a4b; font-size: 26px; font-weight: bold; text-align: center; }
-    table { width: 100%; border-collapse: collapse; margin: 0 0 24px; }
-    th, td { padding: 10px 0; text-align: left; border-bottom: 1px solid #eef2f4; font-size: 15px; }
-    th { color: #71808a; font-weight: normal; }
-    td { text-align: right; font-weight: bold; color: #123c4a; }
-    .due { padding: 14px 18px; border-radius: 8px; background: #fdf6ec; color: #8a5a1f; }
-    .settled { padding: 14px 18px; border-radius: 8px; background: #eef8f2; color: #137a4b; }
-    .footer { padding: 22px 36px; background: #f7fafb; color: #71808a; font-size: 13px; }
-    @media screen and (max-width: 480px) { .content, .header, .footer { padding: 26px 22px; } h1 { font-size: 22px; } }
-  </style>
-</head>
-<body>
-  <div class="wrapper">
-    <div class="card">
-      <header class="header">
-        <p class="brand">MessMate</p>
-      </header>
-      <main class="content">
-        <h1><%= isCash ? 'Cash payment recorded' : 'Payment received' %></h1>
-        <% if (isCash) { %>
-          <p class="lead">Thank you, <%= userName || 'there' %>. Your manager has recorded the cash you handed over for <strong><%= messName %></strong>.</p>
-        <% } else { %>
-          <p class="lead">Thank you, <%= userName || 'there' %>. Your online payment for <strong><%= messName %></strong> has cleared.</p>
-        <% } %>
-
-        <strong class="paid">BDT <%= paidNow %></strong>
-
-        <table>
-          <tr><th>Bill</th><td><%= monthName %> <%= year %></td></tr>
-          <tr><th>Paid on</th><td><%= paidAt %></td></tr>
-          <tr><th>Paid by</th><td><%= methodLabel %></td></tr>
-          <tr><th>Invoice</th><td><%= invoice %></td></tr>
-          <tr><th>Total payable</th><td>BDT <%= totalPayable %></td></tr>
-          <tr><th>Paid so far</th><td>BDT <%= paidSoFar %></td></tr>
-        </table>
-
-        <% if (isFullySettled) { %>
-          <p class="settled"><strong>This bill is now fully settled.</strong> Nothing further is owed for <%= monthName %>.</p>
-        <% } else { %>
-          <p class="due"><strong>BDT <%= dueAmount %> is still outstanding</strong> on this bill. You can pay the rest any time from your bills page.</p>
-        <% } %>
-
-        <p>Keep this email as your receipt.</p>
-        <p>Warm regards,<br><strong>The MessMate Team</strong></p>
-      </main>
-      <footer class="footer">
-        <p>This is an automated message. Please do not reply to this email.</p>
-        <p>&copy; <%= new Date().getFullYear() %> MessMate. All rights reserved.</p>
-      </footer>
-    </div>
-  </div>
-</body>
-</html>
+<%
+  var period = monthName + ' ' + year;
+  var rows = [{ k: 'Method', v: methodLabel }];
+  if (trxId && trxId !== '-') rows.push({ k: 'Reference', v: trxId });
+  rows.push({ k: 'Invoice', v: invoice });
+  rows.push({ k: 'Paid at', v: paidAt });
+  rows.push({ k: 'Bill total', v: '৳' + totalPayable });
+  rows.push({ k: 'Paid so far', v: '৳' + paidSoFar, credit: true });
+  rows.push({ k: 'Remaining due', v: '৳' + dueAmount, strong: true, credit: isFullySettled });
+%>
+<%- include('partials/email', {
+  tone: 'g',
+  icon: '✅',
+  messLine: messName,
+  preheader: isFullySettled
+    ? 'Your ' + period + ' bill is settled.'
+    : '৳' + dueAmount + ' is still due for ' + period + '.',
+  heading: isCash ? 'Cash payment recorded' : 'Payment received — thank you',
+  paras: [isFullySettled
+    ? 'Hi ' + userName + ', your ' + period + ' bill for ' + messName + ' is now settled. The receipt is attached.'
+    : 'Hi ' + userName + ', we got your payment for ' + period + '. ৳' + dueAmount + ' is still due — pay it any time from your bills page. The receipt is attached.'],
+  big: '৳' + paidNow,
+  bigLabel: 'Paid',
+  bigTone: 'g',
+  rows: rows,
+  why: 'Sent for every payment on your bill.'
+}) %>

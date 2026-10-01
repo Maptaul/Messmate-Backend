@@ -1,46 +1,25 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Set your meals for tomorrow</title>
-  <style>
-    body { margin: 0; padding: 0; background: #f4f8fb; color: #263746; font-family: Arial, sans-serif; }
-    .wrapper { width: 100%; padding: 32px 0; }
-    .card { width: 92%; max-width: 600px; margin: 0 auto; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 18px rgba(25, 65, 90, .08); }
-    .header { padding: 28px 36px; background: #087f8c; color: #fff; }
-    .brand { margin: 0; font-size: 24px; font-weight: bold; }
-    .content { padding: 36px; line-height: 1.6; }
-    h1 { margin: 0 0 16px; color: #123c4a; font-size: 26px; }
-    p { margin: 0 0 18px; }
-    .date { display: inline-block; padding: 10px 16px; border-radius: 6px; background: #eef7f8; color: #0a5b64; font-weight: bold; }
-    .button { display: inline-block; margin: 8px 0 20px; padding: 13px 24px; border-radius: 6px; background: #087f8c; color: #fff !important; text-decoration: none; font-weight: bold; }
-    .footer { padding: 22px 36px; background: #f7fafb; color: #71808a; font-size: 13px; }
-    @media screen and (max-width: 480px) { .content, .header, .footer { padding: 26px 22px; } h1 { font-size: 22px; } }
-  </style>
-</head>
-<body>
-  <div class="wrapper">
-    <div class="card">
-      <header class="header">
-        <p class="brand">MessMate</p>
-      </header>
-      <main class="content">
-        <h1>Hi <%= userName || 'there' %>, meals for tomorrow?</h1>
-        <p>You have not set your meal plan for <strong><%= messName %></strong> yet.</p>
-        <p class="date"><%= planDate %></p>
-        <p>The plan locks at 11:00 PM tonight. After that the manager shops for whoever is on the list, so set it now if you are eating.</p>
-        <% if (loginUrl) { %>
-          <a class="button" href="<%= loginUrl %>">Set my meals</a>
-        <% } %>
-        <p>If you are skipping tomorrow, you can ignore this email.</p>
-        <p>Warm regards,<br><strong>The MessMate Team</strong></p>
-      </main>
-      <footer class="footer">
-        <p>This is an automated message. Please do not reply to this email.</p>
-        <p>&copy; <%= new Date().getFullYear() %> MessMate. All rights reserved.</p>
-      </footer>
-    </div>
-  </div>
-</body>
-</html>
+<%
+  var day = new Date(planDate + 'T00:00:00Z').toLocaleDateString('en-GB', {
+    weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC'
+  });
+%>
+<%- include('partials/email', {
+  tone: 'a',
+  icon: '⏰',
+  messLine: messName,
+  preheader: 'Plans for ' + day + ' lock at 11 PM tonight.',
+  heading: 'One hour left to plan tomorrow',
+  paras: [
+    'Hi ' + userName + ', you haven’t set your meals for ' + day + ' at ' + messName + ', and your default is no meals.',
+    'Plans lock at 11:00 PM tonight. After that the manager shops for whoever is on the list, so set it now if you are eating.'
+  ],
+  steps: [
+    { k: 'Lunch', v: '0', n: 'Default' },
+    { k: 'Dinner', v: '0', n: 'Default' }
+  ],
+  cta: 'Plan tomorrow’s meals',
+  ctaHref: loginUrl,
+  note: 'Skipping tomorrow? You can ignore this email.',
+  noteTone: 'n',
+  why: 'Sent at 10 PM on days you haven’t planned and have no default meals.'
+}) %>
