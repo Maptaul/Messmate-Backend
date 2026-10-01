@@ -1,18 +1,9 @@
 import { Router } from "express";
 import { Role } from "../../../generated/prisma/enums";
 import { auth } from "../../middleware/checkAuth";
-import { validateRequest } from "../../middleware/validateRequest";
 import { MemberController } from "./member.controller";
-import { MemberValidation } from "./member.validation";
 
 const router = Router();
-
-router.post(
-	"/add-member",
-	auth(Role.ADMIN, Role.MESS_MANAGER),
-	validateRequest(MemberValidation.AddMemberValidationZodSchema),
-	MemberController.addMember,
-);
 
 router.get(
 	"/my-memberships",
@@ -31,5 +22,8 @@ router.patch(
 	auth(Role.ADMIN, Role.MESS_MANAGER),
 	MemberController.removeMember,
 );
+
+// Adding someone is an invitation now: see /membership/invite.
+router.patch("/leave/:messId", auth(Role.MEMBER), MemberController.leaveMess);
 
 export const MemberRoutes = router;

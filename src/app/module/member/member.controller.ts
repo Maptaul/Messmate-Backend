@@ -4,20 +4,6 @@ import { catchAsync } from "../../utils/catchAsync";
 import { sendResponse } from "../../utils/sendResponse";
 import { MemberServices } from "./member.service";
 
-const addMember = catchAsync(async (req: Request, res: Response) => {
-	const payload = req.body;
-	const user = req.user!;
-
-	const result = await MemberServices.addMember(payload, user);
-
-	sendResponse(res, {
-		statusCode: httpStatus.CREATED,
-		success: true,
-		message: "Member Added Successfully",
-		data: result,
-	});
-});
-
 const getMessMembers = catchAsync(async (req: Request, res: Response) => {
 	const messId = req.params.messId as string;
 	const user = req.user!;
@@ -65,8 +51,22 @@ const removeMember = catchAsync(async (req: Request, res: Response) => {
 	});
 });
 
+const leaveMess = catchAsync(async (req: Request, res: Response) => {
+	const messId = req.params.messId as string;
+	const user = req.user!;
+
+	const result = await MemberServices.leaveMess(messId, user);
+
+	sendResponse(res, {
+		statusCode: httpStatus.OK,
+		success: true,
+		message: "You Left The Mess",
+		data: result,
+	});
+});
+
 export const MemberController = {
-	addMember,
+	leaveMess,
 	getMessMembers,
 	getMyMemberships,
 	removeMember,

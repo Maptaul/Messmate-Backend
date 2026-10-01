@@ -12,7 +12,6 @@ import type { RequestUser } from "../../middleware/checkAuth";
 import { AppError } from "../../utils/AppError";
 import { writeAudit } from "../../utils/audit";
 import { checkMessAccess } from "../../utils/checkMessAccess";
-import type { IAddMemberPayload } from "./member.interface";
 
 const memberSelect = {
 	id: true,
@@ -25,86 +24,6 @@ const memberSelect = {
 		select: { id: true, name: true, email: true, phone: true, avatarUrl: true },
 	},
 	mess: { select: { id: true, name: true } },
-};
-
-const addMember = async (payload: IAddMemberPayload, user: RequestUser) => {
-	const email = payload.email.trim().toLowerCase();
-
-	const mess = await prisma.mess.findFirst({
-		where: { id: payload.messId, isDeleted: false },
-		select: { id: true },
-	});
-
-	if (!mess) {
-		throw new AppError(httpStatus.NOT_FOUND, "Mess Not Found");
-	}
-
-	await checkMessAccess(payload.messId, user);
-
-	if (user.role === Role.MEMBER) {
-		throw new AppError(
-			httpStatus.FORBIDDEN,
-			"Only The Mess Manager Can Add Members",
-		);
-	}
-
-	const invitedUser = await prisma.user.findUnique({
-		where: { email },
-		select: { id: true, name: true, email: true, role: true, isDeleted: true },
-	});
-
-	if (!invitedUser || invitedUser.isDeleted) {
-		throw new AppError(
-			httpStatus.NOT_FOUND,
-			"No User Found With This Email. Ask Them To Register First.",
-		);
-	}
-
-	if (invitedUser.role === Role.ADMIN) {
-		throw new AppError(
-			httpStatus.BAD_REQUEST,
-			"A Platform Admin Cannot Be Added As A Mess Member",
-		);
-	}
-
-	const existingMembership = await prisma.messMember.findUnique({
-		where: {
-			messId_userId: { messId: payload.messId, userId: invitedUser.id },
-		},
-	});
-
-	if (existingMembership) {
-		if (
-			existingMembership.status === MemberStatus.ACTIVE &&
-			!existingMembership.isDeleted
-		) {
-			throw new AppError(
-				httpStatus.CONFLICT,
-				"This User Is Already An Active Member Of This Mess",
-			);
-		}
-
-		return prisma.messMember.update({
-			where: { id: existingMembership.id },
-			data: {
-				status: MemberStatus.ACTIVE,
-				joinedAt: new Date(),
-				leftAt: null,
-				isDeleted: false,
-				deletedAt: null,
-			},
-			select: memberSelect,
-		});
-	}
-
-	return prisma.messMember.create({
-		data: {
-			messId: payload.messId,
-			userId: invitedUser.id,
-			status: MemberStatus.ACTIVE,
-		},
-		select: memberSelect,
-	});
 };
 
 const getMessMembers = async (
@@ -214,6 +133,17 @@ const getMyMemberships = async (query: IQuery, user: RequestUser) => {
 	};
 };
 
+// The bill check removeMember also makes: nobody walks away owing the mess.
+const findUnpaidBill = (memberId: string) =>
+	prisma.memberBill.findFirst({
+		where: {
+			memberId,
+			status: { in: [BillStatus.UNPAID, BillStatus.PARTIAL] },
+			dueAmount: { gt: 0 },
+		},
+		select: { id: true, dueAmount: true },
+	});
+
 const removeMember = async (memberId: string, user: RequestUser) => {
 	const member = await prisma.messMember.findFirst({
 		where: { id: memberId, isDeleted: false },
@@ -250,14 +180,7 @@ const removeMember = async (memberId: string, user: RequestUser) => {
 		);
 	}
 
-	const unpaidBill = await prisma.memberBill.findFirst({
-		where: {
-			memberId,
-			status: { in: [BillStatus.UNPAID, BillStatus.PARTIAL] },
-			dueAmount: { gt: 0 },
-		},
-		select: { id: true, dueAmount: true },
-	});
+	const unpaidBill = await findUnpaidBill(memberId);
 
 	if (unpaidBill) {
 		throw new AppError(
@@ -288,8 +211,64 @@ const removeMember = async (memberId: string, user: RequestUser) => {
 	});
 };
 
+const leaveMess = async (messId: string, user: RequestUser) => {
+	const member = await prisma.messMember.findFirst({
+		where: {
+			messId,
+			userId: user.userId,
+			status: MemberStatus.ACTIVE,
+			isDeleted: false,
+		},
+		select: { id: true, status: true, mess: { select: { managerId: true } } },
+	});
+
+	if (!member) {
+		throw new AppError(
+			httpStatus.NOT_FOUND,
+			"You Are Not A Member Of This Mess",
+		);
+	}
+
+	if (member.mess.managerId === user.userId) {
+		throw new AppError(
+			httpStatus.BAD_REQUEST,
+			"A Manager Cannot Leave Their Own Mess",
+		);
+	}
+
+	const unpaidBill = await findUnpaidBill(member.id);
+
+	if (unpaidBill) {
+		throw new AppError(
+			httpStatus.CONFLICT,
+			`You Have An Unpaid Bill Of ${unpaidBill.dueAmount}. Pay It Before Leaving.`,
+		);
+	}
+
+	return prisma.$transaction(async (tx) => {
+		const updated = await tx.messMember.update({
+			where: { id: member.id },
+			data: { status: MemberStatus.LEFT, leftAt: new Date() },
+			select: memberSelect,
+		});
+
+		await writeAudit(tx, {
+			actorId: user.userId,
+			action: AuditAction.MEMBER_LEFT,
+			messId,
+			subjectMemberId: member.id,
+			entity: "MessMember",
+			entityId: member.id,
+			before: { status: member.status },
+			after: { status: MemberStatus.LEFT },
+		});
+
+		return updated;
+	});
+};
+
 export const MemberServices = {
-	addMember,
+	leaveMess,
 	getMessMembers,
 	getMyMemberships,
 	removeMember,

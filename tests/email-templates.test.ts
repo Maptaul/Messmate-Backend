@@ -303,7 +303,9 @@ test("the welcome email points members to the manager request, and confirms one 
 
 	const member = await render("member-welcome-email", base);
 	assert.match(member, /Ask to become a manager from your profile/);
+	assert.match(member, /enter the join code your manager shares/);
 	assert.doesNotMatch(member, /Create it in four steps/);
+	assert.doesNotMatch(member, /Once your manager adds your email/);
 
 	const applicant = await render("member-welcome-email", {
 		...base,
@@ -341,4 +343,29 @@ test("names in a manager request email are escaped", async () => {
 	});
 	assert.doesNotMatch(html, /<b>Green<\/b>/);
 	assert.match(html, /&lt;b&gt;Green&lt;\/b&gt;/);
+});
+
+test("an invitation names the manager and the mess, and says nothing is shared yet", async () => {
+	const html = await render("membership-invite", {
+		userName: "Rahim",
+		messName: "Green View Mess",
+		managerName: "Karim",
+		loginUrl: "https://messmate.test/login",
+	});
+	assert.match(html, /Karim invited you to join Green View Mess/);
+	assert.match(html, /until you accept/);
+});
+
+test("an answered request to join says whether they are in", async () => {
+	const base = {
+		userName: "Rahim",
+		messName: "Green View Mess",
+		loginUrl: "https://messmate.test/login",
+	};
+
+	const approved = await render("membership-request-approved", base);
+	assert.match(approved, /accepted your request to join Green View Mess/);
+
+	const declined = await render("membership-request-declined", base);
+	assert.match(declined, /didn’t accept your request to join/);
 });
