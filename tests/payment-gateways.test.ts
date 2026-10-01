@@ -1,8 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import jwt from "jsonwebtoken";
 
+import config from "../src/app/config";
 import { isStripeSessionSettleable, toPoisha } from "../src/app/lib/stripe";
-import { isCredentialRoute } from "../src/app/utils/credentialRoute";
+import {
+	credentialLimitKey,
+	generalLimitKey,
+	isCredentialRoute,
+} from "../src/app/utils/credentialRoute";
 
 const paid = { payment_status: "paid", currency: "bdt", amount_total: 1385050 };
 
@@ -30,4 +36,37 @@ test("only password and OTP endpoints get the strict auth budget", () => {
 	assert.equal(credential("/api/v1/auth/logout"), false);
 	assert.equal(credential("/api/v1/auth/merge"), true);
 	assert.equal(credential("/api/v1/mess/my-messes"), false);
+});
+
+test("signed-in requests count against their user, everyone else against the IP", () => {
+	const as = (userId: string) => ({
+		ip: "76.76.21.21",
+		cookies: {
+			accessToken: jwt.sign({ userId }, config.jwt_access_secret),
+		},
+		body: {},
+	});
+
+	assert.equal(generalLimitKey(as("u1")), "user:u1");
+	assert.equal(generalLimitKey(as("u2")), "user:u2");
+	assert.equal(
+		generalLimitKey({ ip: "76.76.21.21", cookies: {}, body: {} }),
+		"76.76.21.21",
+	);
+	assert.equal(
+		generalLimitKey({
+			ip: "76.76.21.21",
+			cookies: { accessToken: jwt.sign({ userId: "u1" }, "forged") },
+			body: {},
+		}),
+		"76.76.21.21",
+	);
+});
+
+test("credential attempts are counted per account behind a shared IP", () => {
+	const login = (email: string) =>
+		credentialLimitKey({ ip: "76.76.21.21", cookies: {}, body: { email } });
+
+	assert.notEqual(login("a@x.com"), login("b@x.com"));
+	assert.equal(login(" A@x.com "), login("a@x.com"));
 });

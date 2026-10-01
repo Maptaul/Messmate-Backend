@@ -29,6 +29,9 @@ import { UserRoutes } from "./app/module/user/user.route";
 
 const app: Application = express();
 
+// Vercel is the one proxy in front and sets X-Forwarded-For to the caller.
+app.set("trust proxy", 1);
+
 app.use(helmet());
 
 app.use((_req, res, next) => {

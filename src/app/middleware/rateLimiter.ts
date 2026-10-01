@@ -2,7 +2,11 @@ import rateLimit from "express-rate-limit";
 import httpStatus from "http-status";
 import { RedisStore } from "rate-limit-redis";
 import { ensureRedis } from "../lib/redis";
-import { isCredentialRoute } from "../utils/credentialRoute";
+import {
+	credentialLimitKey,
+	generalLimitKey,
+	isCredentialRoute,
+} from "../utils/credentialRoute";
 
 const WINDOW_MS = 15 * 60 * 1000;
 
@@ -30,6 +34,7 @@ export const generalLimiter = rateLimit({
 	standardHeaders: "draft-7",
 	legacyHeaders: false,
 	store: redisStore("rl:general:"),
+	keyGenerator: generalLimitKey,
 	passOnStoreError: true,
 	skip: (req) =>
 		isCredentialRoute(req) ||
@@ -43,6 +48,7 @@ export const authLimiter = rateLimit({
 	standardHeaders: "draft-7",
 	legacyHeaders: false,
 	store: redisStore("rl:auth:"),
+	keyGenerator: credentialLimitKey,
 	passOnStoreError: true,
 	skip: (req) => !isCredentialRoute(req),
 	message: tooManyRequests(
