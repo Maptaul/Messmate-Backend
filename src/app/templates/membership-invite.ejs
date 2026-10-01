@@ -1,0 +1,14 @@
+<%- include('partials/email', {
+  tone: 'b',
+  icon: '✉️',
+  messLine: messName,
+  preheader: managerName + ' invited you to join ' + messName + ' on MessMate.',
+  heading: 'You’re invited to ' + messName,
+  paras: [
+    'Hi ' + userName + ', ' + managerName + ' invited you to join ' + messName + ' on MessMate.',
+    'Open MessMate to accept or decline. Nothing about you is shared with the mess until you accept.'
+  ],
+  cta: 'See the invitation',
+  ctaHref: loginUrl,
+  why: 'You’re getting this because a mess manager invited this email address.'
+}) %>

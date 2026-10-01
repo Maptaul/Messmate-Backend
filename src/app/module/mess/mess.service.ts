@@ -22,6 +22,8 @@ const messListSelect = {
 	address: true,
 	monthlyRent: true,
 	monthlyDeposit: true,
+	// What a member types to ask to join; a request still needs the manager.
+	joinCode: true,
 	createdAt: true,
 	manager: { select: { id: true, name: true, email: true } },
 	_count: { select: { members: true, cycles: true } },

@@ -1,0 +1,14 @@
+<%- include('partials/email', {
+  tone: 'n',
+  icon: '🚪',
+  messLine: messName,
+  preheader: 'The manager of ' + messName + ' didn’t accept your request.',
+  heading: messName + ' didn’t accept your request',
+  paras: [
+    'Hi ' + userName + ', the manager of ' + messName + ' didn’t accept your request to join.',
+    'If you live there, check the join code with the manager and ask again, or ask them to invite you.'
+  ],
+  cta: 'Open MessMate',
+  ctaHref: loginUrl,
+  why: 'You’re getting this because you asked to join this mess.'
+}) %>

@@ -1,0 +1,14 @@
+<%- include('partials/email', {
+  tone: 'g',
+  icon: '🏠',
+  messLine: messName,
+  preheader: 'Your request was accepted. Plan tomorrow’s meals before 11 PM.',
+  heading: 'You’re in: ' + messName,
+  paras: [
+    'Hi ' + userName + ', the manager accepted your request to join ' + messName + '.',
+    'You can now plan your meals before 11 PM each night, read the shared ledger and pay your bill by card or bKash.'
+  ],
+  cta: 'Open MessMate',
+  ctaHref: loginUrl,
+  why: 'You’re getting this because you asked to join this mess.'
+}) %>
