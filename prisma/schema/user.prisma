@@ -29,6 +29,8 @@ model User {
   auditLogs       AuditLog[]     @relation("AuditActor")
   financeEntries  FinanceEntry[]
 
+  managerApplications ManagerApplication[]
+
   @@unique([email])
   @@index([role])
   @@index([isDeleted])

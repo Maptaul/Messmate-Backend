@@ -1,0 +1,21 @@
+model ManagerApplication {
+  id String @id @default(uuid())
+
+  messName    String @db.VarChar(120)
+  messAddress String @db.VarChar(300)
+
+  status          ManagerApplicationStatus @default(PENDING)
+  rejectionReason String?                  @db.VarChar(500)
+  reviewedBy      String?
+  reviewedAt      DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([status, createdAt])
+  @@index([userId])
+  @@map("manager_applications")
+}

@@ -71,6 +71,14 @@ enum AuditAction {
   DEPOSIT_UPDATED
   EXPENSE_ADDED
   EXPENSE_UPDATED
+  MANAGER_APPROVED
+  MANAGER_REJECTED
+}
+
+enum ManagerApplicationStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 enum FinanceEntryType {
