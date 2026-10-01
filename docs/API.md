@@ -3,7 +3,7 @@
 **Base URL:** `https://messmatebackend.vercel.app`
 **Local:** `http://localhost:5000`
 
-84 endpoints across 15 modules, all versioned under `/api/v1`. The runnable version of this reference is `postman/MessMate.postman_collection.json` — 125
+92 endpoints across 16 modules, all versioned under `/api/v1`. The runnable version of this reference is `postman/MessMate.postman_collection.json` — 125
 requests that chain their own tokens and ids.
 
 ---
@@ -129,10 +129,34 @@ users, `?type=` and `?paidByMemberId=` (`fund` = the mess fund) on expenses, `?m
 
 | Method | Path | Roles | Validated | Notes |
 | --- | --- | --- | :-: | --- |
-| POST | `/api/v1/member/add-member` | `ADMIN` `MESS_MANAGER` | yes |  |
 | GET | `/api/v1/member/my-memberships` | `MESS_MANAGER` `MEMBER` | — |  |
 | GET | `/api/v1/member/mess-members/:messId` | `ADMIN` `MESS_MANAGER` `MEMBER` | — |  |
 | PATCH | `/api/v1/member/remove-member/:memberId` | `ADMIN` `MESS_MANAGER` | — |  |
+| PATCH | `/api/v1/member/leave/:messId` | `MEMBER` | — | leave a mess yourself; 409 while a bill is still owed |
+
+### Membership — `/api/v1/membership`
+
+| Method | Path | Roles | Validated | Notes |
+| --- | --- | --- | :-: | --- |
+| GET | `/api/v1/membership/join-code/:code` | `MEMBER` | — | the mess a join code belongs to (name, address, manager, member count) |
+| POST | `/api/v1/membership/request` | `MEMBER` | yes | `{ joinCode, note? }` asks to join |
+| POST | `/api/v1/membership/invite` | `ADMIN` `MESS_MANAGER` | yes | `{ messId, email }`; replaces `member/add-member` |
+| GET | `/api/v1/membership/my` | `MEMBER` | — | your pending invitations and requests |
+| GET | `/api/v1/membership/mess/:messId` | `ADMIN` `MESS_MANAGER` | — | `?status=PENDING|ACCEPTED|DECLINED|CANCELLED` (default `PENDING`) |
+| POST | `/api/v1/membership/mess/:messId/join-code` | `ADMIN` `MESS_MANAGER` | — | a new join code; the old one stops working |
+| PATCH | `/api/v1/membership/:id/accept` | any | — | an invite by the person invited; a request by the manager or an admin |
+| PATCH | `/api/v1/membership/:id/decline` | any | — | same rule as accept |
+| PATCH | `/api/v1/membership/:id/cancel` | any | — | whoever sent it, or an admin |
+
+Nobody joins a mess without agreeing to it. A member asks with the join code
+their manager shares, and the manager approves; or the manager invites by email,
+and the member accepts. Until an invite is accepted the manager sees only the
+address they typed. Accepting creates the membership (or brings a LEFT one back)
+and is audited as `MEMBER_JOINED`; leaving is `MEMBER_LEFT`. One open invite or
+request per person and mess, enforced by a partial unique index.
+
+Known limits: an invite to an address with no account says so (404), which tells a
+manager the address is not registered; and rejoining resets `joinedAt`.
 
 ### Billing Cycle — `/api/v1/cycle`
 
