@@ -11,6 +11,7 @@
 		"typecheck": "tsc --noEmit",
 		"postinstall": "prisma generate",
 		"check:settlement": "tsx scripts/check-settlement.ts",
+		"seed:demo": "tsx scripts/seed-demo.ts",
 		"test": "node --import tsx --test \"tests/**/*.test.ts\"",
 		"test:postman": "pnpx newman run postman/MessMate.postman_collection.json",
 		"test:postman:local": "pnpx newman run postman/MessMate.postman_collection.json --env-var baseUrl=http://localhost:5000",
