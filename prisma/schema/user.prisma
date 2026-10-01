@@ -30,6 +30,7 @@ model User {
   financeEntries  FinanceEntry[]
 
   managerApplications ManagerApplication[]
+  membershipRequests  MembershipRequest[]
 
   @@unique([email])
   @@index([role])

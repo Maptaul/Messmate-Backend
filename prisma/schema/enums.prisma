@@ -73,6 +73,20 @@ enum AuditAction {
   EXPENSE_UPDATED
   MANAGER_APPROVED
   MANAGER_REJECTED
+  MEMBER_JOINED
+  MEMBER_LEFT
+}
+
+enum MembershipRequestKind {
+  INVITE
+  REQUEST
+}
+
+enum MembershipRequestStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  CANCELLED
 }
 
 enum ManagerApplicationStatus {
