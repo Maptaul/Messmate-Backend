@@ -3,7 +3,7 @@
 **Base URL:** `https://messmatebackend.vercel.app`
 **Local:** `http://localhost:5000`
 
-81 endpoints across 14 modules, all versioned under `/api/v1`. The runnable version of this reference is `postman/MessMate.postman_collection.json` — 125
+84 endpoints across 15 modules, all versioned under `/api/v1`. The runnable version of this reference is `postman/MessMate.postman_collection.json` — 125
 requests that chain their own tokens and ids.
 
 ---
@@ -93,7 +93,7 @@ users, `?type=` and `?paidByMemberId=` (`fund` = the mess fund) on expenses, `?m
 
 | Method | Path | Roles | Validated | Notes |
 | --- | --- | --- | :-: | --- |
-| POST | `/api/v1/auth/register` | _public_ | yes |  |
+| POST | `/api/v1/auth/register` | _public_ | yes | `role: MESS_MANAGER` needs `messName` + `messAddress` and files a manager request; the account starts as a member |
 | POST | `/api/v1/auth/verify-email` | _public_ | yes |  |
 | POST | `/api/v1/auth/login` | _public_ | yes |  |
 | POST | `/api/v1/auth/google` | _public_ | yes |  |
@@ -101,7 +101,7 @@ users, `?type=` and `?paidByMemberId=` (`fund` = the mess fund) on expenses, `?m
 | POST | `/api/v1/auth/logout` | _public_ | — |  |
 | POST | `/api/v1/auth/forgot-password` | _public_ | yes |  |
 | POST | `/api/v1/auth/reset-password` | _public_ | yes |  |
-| GET | `/api/v1/auth/me` | `ADMIN` `MESS_MANAGER` `MEMBER` | — |  |
+| GET | `/api/v1/auth/me` | `ADMIN` `MESS_MANAGER` `MEMBER` | — | includes `managerApplications` (the latest request) |
 
 ### User — `/api/v1/user`
 
@@ -115,7 +115,7 @@ users, `?type=` and `?paidByMemberId=` (`fund` = the mess fund) on expenses, `?m
 
 | Method | Path | Roles | Validated | Notes |
 | --- | --- | --- | :-: | --- |
-| POST | `/api/v1/mess/create-mess` | `MESS_MANAGER` | yes |  |
+| POST | `/api/v1/mess/create-mess` | `MESS_MANAGER` | yes | a manager runs one mess; 409 while they already manage one |
 | GET | `/api/v1/mess/all-messes` | `ADMIN` | — |  |
 | GET | `/api/v1/mess/my-messes` | `MESS_MANAGER` `MEMBER` | — |  |
 | PATCH | `/api/v1/mess/update-mess/:messId` | `ADMIN` `MESS_MANAGER` | yes |  |
@@ -233,6 +233,22 @@ users, `?type=` and `?paidByMemberId=` (`fund` = the mess fund) on expenses, `?m
 | GET | `/api/v1/admin/users/:userId` | `ADMIN` | — |  |
 | PATCH | `/api/v1/admin/users/:userId/role` | `ADMIN` | yes |  |
 | PATCH | `/api/v1/admin/users/:userId/status` | `ADMIN` | yes |  |
+
+### Manager requests — `/api/v1/manager-request`
+
+| Method | Path | Roles | Validated | Notes |
+| --- | --- | --- | :-: | --- |
+| POST | `/api/v1/manager-request/apply` | `MEMBER` | yes | `{ messName, messAddress }`; 409 while another request is pending |
+| GET | `/api/v1/manager-request/all-requests` | `ADMIN` | — | `?status=PENDING|APPROVED|REJECTED&searchTerm=&page=&limit=` |
+| POST | `/api/v1/manager-request/review` | `ADMIN` | yes | `{ requestId, status: APPROVED|REJECTED, rejectionReason? }` — a reason is required to reject |
+
+Nobody becomes a manager by signing up. Choosing to run a mess files a request;
+an admin approves it (the account becomes `MESS_MANAGER`, the user logs in again)
+or rejects it with a reason, and the applicant is emailed either way. Every
+request is kept, a user can have only one pending at a time (a partial unique
+index enforces it), and both decisions are written to the audit log as
+`MANAGER_APPROVED` / `MANAGER_REJECTED`.
+
 
 ### The monthly advance
 
