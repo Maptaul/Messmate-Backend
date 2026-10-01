@@ -142,7 +142,7 @@ users, `?type=` and `?paidByMemberId=` (`fund` = the mess fund) on expenses, `?m
 | POST | `/api/v1/membership/request` | `MEMBER` | yes | `{ joinCode, note? }` asks to join |
 | POST | `/api/v1/membership/invite` | `ADMIN` `MESS_MANAGER` | yes | `{ messId, email }`; replaces `member/add-member` |
 | GET | `/api/v1/membership/my` | `MEMBER` | — | your pending invitations and requests |
-| GET | `/api/v1/membership/mess/:messId` | `ADMIN` `MESS_MANAGER` | — | `?status=PENDING|ACCEPTED|DECLINED|CANCELLED` (default `PENDING`) |
+| GET | `/api/v1/membership/mess/:messId` | `ADMIN` `MESS_MANAGER` | — | `?status=PENDING\|ACCEPTED\|DECLINED\|CANCELLED` (default `PENDING`), `&kind=INVITE\|REQUEST` |
 | POST | `/api/v1/membership/mess/:messId/join-code` | `ADMIN` `MESS_MANAGER` | — | a new join code; the old one stops working |
 | PATCH | `/api/v1/membership/:id/accept` | any | — | an invite by the person invited; a request by the manager or an admin |
 | PATCH | `/api/v1/membership/:id/decline` | any | — | same rule as accept |
@@ -263,8 +263,8 @@ manager the address is not registered; and rejoining resets `joinedAt`.
 | Method | Path | Roles | Validated | Notes |
 | --- | --- | --- | :-: | --- |
 | POST | `/api/v1/manager-request/apply` | `MEMBER` | yes | `{ messName, messAddress }`; 409 while another request is pending |
-| GET | `/api/v1/manager-request/all-requests` | `ADMIN` | — | `?status=PENDING|APPROVED|REJECTED&searchTerm=&page=&limit=` |
-| POST | `/api/v1/manager-request/review` | `ADMIN` | yes | `{ requestId, status: APPROVED|REJECTED, rejectionReason? }` — a reason is required to reject |
+| GET | `/api/v1/manager-request/all-requests` | `ADMIN` | — | `?status=PENDING\|APPROVED\|REJECTED&searchTerm=&page=&limit=` |
+| POST | `/api/v1/manager-request/review` | `ADMIN` | yes | `{ requestId, status: APPROVED\|REJECTED, rejectionReason? }` — a reason is required to reject |
 
 Nobody becomes a manager by signing up. Choosing to run a mess files a request;
 an admin approves it (the account becomes `MESS_MANAGER`, the user logs in again)

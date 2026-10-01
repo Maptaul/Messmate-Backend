@@ -25,6 +25,7 @@ import { canCancel, canDecide, newJoinCode } from "./membership.rules";
 import { joinCodeSchema } from "./membership.validation";
 
 const STATUSES: string[] = Object.values(MembershipRequestStatus);
+const KINDS: string[] = Object.values(MembershipRequestKind);
 
 const loginUrl = () => `${config.frontend_url}/login`;
 
@@ -307,6 +308,9 @@ const getMessRequests = async (
 			query.status && STATUSES.includes(query.status)
 				? (query.status as MembershipRequestStatus)
 				: MembershipRequestStatus.PENDING,
+		...(query.kind && KINDS.includes(query.kind)
+			? { kind: query.kind as MembershipRequestKind }
+			: {}),
 	};
 
 	const [rows, total] = await Promise.all([
