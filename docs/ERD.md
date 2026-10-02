@@ -1,6 +1,6 @@
 # MessMate — Entity Relationship Diagram
 
-13 models, one per schema file under `prisma/schema/`, and all 25 of their
+15 models, one per schema file under `prisma/schema/`, and all 28 of their
 relations. The diagram is written by hand, so it can drift from the schema — it
 was last checked foreign key by foreign key: every `@relation` in
 `prisma/schema/` is drawn below, and every line below is a real `@relation`.
@@ -14,10 +14,13 @@ erDiagram
     User ||--o{ Deposit : "recorded"
     User ||--o{ Expense : "recorded"
     User ||--o{ FinanceEntry : "keeps"
+    User ||--o{ ManagerApplication : "asks to run a mess"
+    User ||--o{ MembershipRequest : "is invited or asks"
 
     Mess ||--o{ MessMember : has
     Mess ||--o{ BillingCycle : "one per month"
     Mess ||--o{ AuditLog : "is audited in"
+    Mess ||--o{ MembershipRequest : "is asked to join"
 
     BillingCycle ||--o{ MealEntry : records
     BillingCycle ||--o{ MealPlan : declares
@@ -48,6 +51,7 @@ erDiagram
         string managerId FK
         decimal monthlyRent
         decimal monthlyDeposit
+        string joinCode UK
     }
     MessMember {
         string id PK
@@ -135,6 +139,25 @@ erDiagram
         decimal amount
         date date
     }
+    ManagerApplication {
+        string id PK
+        string userId FK
+        string messName
+        string messAddress
+        ManagerApplicationStatus status
+        string rejectionReason
+        string reviewedBy
+    }
+    MembershipRequest {
+        string id PK
+        string messId FK
+        string userId FK
+        MembershipRequestKind kind
+        MembershipRequestStatus status
+        string note
+        string createdById
+        string decidedById
+    }
 ```
 
 Three relationships carry most of the design:
@@ -150,6 +173,19 @@ Three relationships carry most of the design:
   member declared in advance; an entry is what the manager recorded as eaten.
   Only entries are charged. Merging them would let a declaration quietly become
   a charge.
+
+**Joining is a request, not a status.** `MembershipRequest` holds every
+invitation (`kind: INVITE`) and every request to join (`kind: REQUEST`) until
+it is answered. A pending person is deliberately not a `MessMember`: a dozen
+reads — meals, deposits, duty, the settlement — only check `isDeleted`, so a
+"pending" member there would quietly be billed. Only an accepted request creates
+the membership, or reactivates a `LEFT` one. `createdById` and `decidedById` are
+plain ids, not relations: who asked and who answered is history, and must
+survive either account.
+
+`ManagerApplication` is the same idea one level up: someone asking to run a
+mess, answered by an admin. Every application is its own row, so the history of
+a rejected-then-approved applicant stays readable.
 
 `FinanceEntry` hangs off `User`, not `MessMember`, on purpose: a person's own
 income and spending belong to them, not to whichever mess they live in, and
@@ -188,6 +224,16 @@ one mess is nothing to do with the other.
 | `MealPlan(memberId, date)` | two declarations for the same day |
 | `MemberBill(cycleId, memberId)` | two bills for one member |
 | `Payment.bkashPaymentId` | a replayed callback creating a second payment |
+| `Mess.joinCode` | two messes answering to one code |
+| `ManagerApplication(userId) WHERE status = 'PENDING'` | two waiting applications from one person |
+| `MembershipRequest(messId, userId) WHERE status = 'PENDING'` | an invitation and a request racing for the same seat |
+
+The last two are partial unique indexes. Prisma cannot express them, so they
+are written by hand in their migrations.
+
+`MemberBill.status` is `UNPAID`, `PARTIAL`, `PAID` or `CARRIED`. A carried bill's
+balance opened the next closed month, so it is kept for history with nothing
+due.
 
 ## Deletion rules
 
@@ -203,6 +249,9 @@ RESTRICT` — so the database refuses to remove a user who has acted while that
 trail exists. The same holds for whoever recorded a deposit or an expense: a
 record of who did something is worth nothing if deleting them could erase it. In
 practice it never comes up, because accounts are soft-deleted and the row stays.
+
+`ManagerApplication` and `MembershipRequest` cascade from their user and mess:
+with the person or the mess gone, a request has nothing left to answer.
 
 `BillingCycle.closedById` is the one exception, and it is `SET NULL` on purpose:
 a closed month has to survive losing the name of whoever closed it.

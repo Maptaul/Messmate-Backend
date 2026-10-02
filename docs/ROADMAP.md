@@ -83,7 +83,7 @@ The paper month is now a permanent regression test.
 
 ### 5. Automated tests
 
-`pnpm test` runs 121 checks on Node's own test runner — no framework:
+`pnpm test` runs 149 checks on Node's own test runner — no framework:
 
 - `august-2026-ledger` — the real month, above
 - `bill-breakdown` — the same month with khala, utilities and rent, against the
@@ -93,7 +93,12 @@ The paper month is now a permanent regression test.
 - `cron-dates` — Dhaka/UTC boundaries around the 11 PM cutoff
 - `email-templates` — renders every email, so a broken template fails the build
   rather than a member's inbox
-- `rolling-advance` — a balance carried across three months
+- `rolling-advance` — a balance carried across three months, a carried bill
+  given its balance back on reopen, and nobody absent billed for a month
+- `manager-request` and `membership` — who may answer an invitation or a
+  request, join-code parsing, and every email they send
+- `payment-gateways` — the rate limiter keys a signed-in request on its user
+  and a credential attempt on the account
 - `default-meals` — a plan beats a default, and nobody eats before joining or
   after leaving
 - `activity-feed` — a member's feed scope cannot be widened from the query string
@@ -112,7 +117,7 @@ The integration suite paid for itself immediately: it found that a malformed
 JSON body returned **500**, because `body-parser`'s `SyntaxError` was not on the
 list of known errors. Now it answers 400.
 
-`pnpm test:postman` and `pnpm test:postman:local` drive the 125-request
+`pnpm test:postman` and `pnpm test:postman:local` drive the 141-request
 collection through newman.
 
 ### 6. CI
@@ -412,6 +417,68 @@ yesterday and last month moved each period by exactly the right amount, the
 week began on Saturday the 12th, a manager got `404` on a member's entry, and a
 deleted entry left every summary.
 
+### 27. One rate-limit budget for the whole site
+
+Behind Vercel every request arrived from the proxy's address, so the limiter
+counted the whole site against one 300-request budget and started answering
+`429` to everybody after a few minutes of real use. The app now trusts Vercel's
+`X-Forwarded-For` (`trust proxy` set to one hop), a signed-in request counts
+against its user, and a login or password-reset attempt against the IP and the
+account together. Checked live: the remaining count fell by exactly one per
+request.
+
+### 28. Nobody becomes a manager by signing up
+
+Anyone could register as "I run a mess" and get a manager's routes. Now that
+choice files a `ManagerApplication` with the mess's name and address, and the
+account stays a member until an admin approves it — the role changes, the next
+token refresh carries it — or rejects it with a reason. Both answers are emailed
+and audited (`MANAGER_APPROVED`, `MANAGER_REJECTED`). A member can apply later
+from their profile; every application is kept, one pending at a time.
+
+A manager also runs exactly one mess now: `create-mess` answers `409` while they
+have one, and deleting it frees them to start another.
+
+### 29. Nobody joins a mess without agreeing to it
+
+`POST /member/add-member` put anyone with an account into a mess on the
+manager's word: their name, email and phone shown to strangers, meals and rent
+charged in their name. It is gone. Every mess has a six-character join code; a
+member asks with it and the manager approves or declines, or the manager invites
+by email and the member accepts or declines. Invitations and requests live in
+`MembershipRequest`, not in a new member status, because a dozen reads only
+check `isDeleted` and a "pending" member would have been billed. A member can
+leave on their own once their bills are paid (`MEMBER_JOINED`, `MEMBER_LEFT`).
+
+### 30. A carried balance is paid once
+
+Found while building the demo data. The rolling advance carries last month's
+balance into the new bill — but the old bill still asked for the same money, so
+a member could pay it twice, the weekly reminder counted it twice, and the
+admin's outstanding total double-counted it. Closing a month now marks every
+bill it opened with as `CARRIED` with nothing due. Reopening that month gives
+each one its balance back, and an older month can no longer be reopened while a
+later one is closed on top of it, since that would recompute a balance the later
+month already used.
+
+### 31. Only the people who were there share a month
+
+Found the same way. The settlement took everyone who had ever left as well as
+everyone active, so a member who moved out in September paid an equal share of
+October's khala, gas and internet, and got a bill for it. Now someone with no
+day in the month and nothing recorded in it is left out.
+
+### 32. Demo data
+
+`pnpm seed:demo` prints a plan — every member's newest bill, computed by the
+same `computeSettlement` — and `--write` builds it: three messes, twelve members
+each showing one case, three closed months and the current one open, plus a
+pending join request, invitation and manager application. Months close and cash
+is paid through the real services, so the numbers are the ones the app would
+produce. A rerun resets the demo, and the Postman collection gets its own
+manager and member so a run never touches it. `.test` addresses are never
+mailed, so neither the seed nor the reminder crons bounce.
+
 ---
 
 ## Still open
@@ -431,6 +498,21 @@ groceries actually cost, which is a deliberate buffer on paper but would break
 the invariant that `Σ mealCost === groceryTotal` exactly. Supporting it means a
 per-mess rounding setting *and* somewhere for the surplus to live. Left alone
 until that is decided, because it is a money policy, not a bug.
+
+**A gateway payment that lands after its bill was carried.** If a member starts a
+card or bKash checkout and the manager closes the next month before the payment
+completes, the late settlement credits the old bill and flips it out of
+`CARRIED`, while the new bill still holds the same balance. It needs a checkout
+open across a month close, so it is rare; the fix is to settle such a payment
+against the newest bill instead.
+
+**An invitation tells the manager whether an email has an account.** An unknown
+address answers `404` and a member of the mess `409`. Only a manager can invite
+and the route is rate limited, so it is left as is.
+
+**Rejoining resets `joinedAt`.** A member who left and is accepted back starts a
+fresh tenure, so a later month prorates rent from the day they came back. That
+is what rent should do; the original join date survives only in the audit trail.
 
 ---
 

@@ -39,9 +39,9 @@ bill, and who owes what at the end. MessMate turns that notebook into an API.
 
 | Role             | Can do                                                                                                                                                      |
 | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **ADMIN**        | Platform operator. All messes and users, role changes, block/unblock, audit logs, dashboard stats, force-reopen a closed cycle. Not a resident of any mess. |
-| **MESS_MANAGER** | Owns messes. Members, meals, expenses, deposits, grocery-duty bookings, and closing the month — for their own messes only.                                  |
-| **MEMBER**       | Declares their own meal plan and pays their own bill. Reads the shared ledger: meals, expenses, deposits and duty for the whole mess.                       |
+| **ADMIN**        | Platform operator. All messes and users, approves or rejects manager requests, role changes, block/unblock, audit logs, dashboard stats, force-reopen a closed cycle. Not a resident of any mess. |
+| **MESS_MANAGER** | Runs one mess, once an admin approves their request. Invites members and answers join requests; records meals, expenses, deposits and grocery-duty bookings; closes the month. |
+| **MEMBER**       | Joins a mess with its join code or an invitation, declares their own meal plan and pays their own bill, and can leave once it is paid. Reads the shared ledger of the mess they live in. |
 
 Authorization is two layers. `auth(...)` checks the account type;
 `checkMessAccess` checks that the mess belongs to the caller. Any route taking a
@@ -128,6 +128,16 @@ Whatever is left unpaid when the month closes is carried into the next month's
 bill as `openingBalance`, positive if you owe and negative if the mess owes you.
 It rolls until it is settled.
 
+A balance is paid once, on the newest bill. When the next month closes, the bill
+it came from becomes `CARRIED` with nothing due, so paying it is refused and no
+reminder counts it twice. Reopening the month that carried it gives the old bill
+its balance back, and an older month cannot be reopened while a later one is
+closed on top of it.
+
+Only the people who were there share a month. Someone with no day in it and
+nothing recorded in it — a member who left in September, say — gets no October
+bill, and none of October's khala, gas or internet.
+
 `Mess.monthlyDeposit` is what a mess charges. Leave it at `0` and MessMate
 behaves exactly as it did before — no advance line, and nothing carried forward.
 
@@ -176,15 +186,29 @@ any length — four days for one person, six for the next. There is no
 "generate the month" step; the calendar view is that data read back day by day,
 and `my-duty-days` totals what each person did.
 
+**Nobody runs a mess on their word alone.** Signing up to run a mess files a
+request with the mess's name and address; until an admin approves it, the
+account is an ordinary member. A rejection carries a reason, and every request
+is kept, one pending at a time.
+
+**A manager runs one mess.** A second `create-mess` answers `409` until the first
+is deleted. A manager cannot join someone else's mess either.
+
+**Nobody joins a mess without agreeing to it.** Every mess has a six-character
+join code. A member asks with it and the manager approves or declines; or the
+manager invites by email and the member accepts or declines. There is no public
+list of messes, an invitee's name stays hidden until they accept, and a member
+leaves on their own once their bills are paid.
+
 ---
 
 ## Database
 
-13 models, one per schema file under `prisma/schema/`:
+15 models, one per schema file under `prisma/schema/`:
 
 `User` · `Mess` · `MessMember` · `BillingCycle` · `MealEntry` · `MealPlan` ·
 `Expense` · `Deposit` · `GroceryDuty` · `MemberBill` · `Payment` · `AuditLog` ·
-`FinanceEntry`
+`FinanceEntry` · `ManagerApplication` · `MembershipRequest`
 
 Entity relationships and the reasoning behind them: **[docs/ERD.md](docs/ERD.md)**.
 
@@ -194,6 +218,11 @@ Entity relationships and the reasoning behind them: **[docs/ERD.md](docs/ERD.md)
 | `MealEntry(memberId, date)`         | double-counting a day                         |
 | `MemberBill(cycleId, memberId)`     | two bills for one member                      |
 | `Payment.bkashPaymentId`            | a replayed callback creating a second payment |
+| `Mess.joinCode`                     | two messes answering to one code              |
+| `ManagerApplication(userId)` while `PENDING` | two waiting requests from one person |
+| `MembershipRequest(messId, userId)` while `PENDING` | an invitation and a request racing for the same seat |
+
+The last two are partial unique indexes, written by hand in their migrations.
 
 Money is `Decimal`, never `Float`. Nothing is hard-deleted — `isDeleted` +
 `deletedAt`, and every read filters them out.
@@ -236,7 +265,9 @@ All under `/api/v1`. Full reference: [docs/API.md](docs/API.md).
 | `/auth`         | Register with email OTP, login, Google, refresh, forgot/reset password, `/me` |
 | `/user`         | Profile, avatar upload and removal                                            |
 | `/mess`         | Create, list, update, soft-delete a mess; audit trail and unread activity     |
-| `/member`       | Add and release members, memberships, mess roster                             |
+| `/member`       | Mess roster, my memberships, remove a member, leave a mess                    |
+| `/membership`   | Join codes, requests to join, invitations, and answering them                 |
+| `/manager-request` | Asking to run a mess, and the admin's approval or rejection                |
 | `/cycle`        | Open a month, preview or close it (runs the settlement), reopen it (Admin)    |
 | `/meal`         | The register: what was actually eaten                                         |
 | `/meal-plan`    | The calendar: plans, default meals, the cutoff and each day's headcount       |
@@ -292,7 +323,6 @@ their feed the moment the manager saves it.
 
 ## Payment (bKash, Stripe, cash)
 
-```
 **Cash still works.** Most mess money is notes in a hand, so
 `POST /payment/record-cash-payment` lets the manager record what a member handed
 over: same arithmetic, same audit row, same receipt, `paymentGateway: "cash"`.
@@ -463,6 +493,28 @@ pnpm dev
 
 Server starts at `http://localhost:5000`.
 
+### Demo data
+
+```bash
+pnpm seed:demo           # prints the plan and every member's newest bill, writes nothing
+pnpm seed:demo --write   # replaces the demo data in DATABASE_URL
+```
+
+Three messes with their managers and twelve members, three closed months and
+the current one open, counted back from today in Dhaka. Each member shows one
+case: a bill left unpaid to pay by card or bKash, half paid in cash, a credit the
+mess owes back, a credit carried into the next month, a mid-month join and a
+mid-month leave, ten days away, lunch only, deposits in instalments, groceries
+bought on duty, and a personal finance history. A join request, an invitation
+and a manager application are left waiting, and the Postman collection gets its
+own manager and member with no mess.
+
+Closing months and cash payments go through the same services the API uses;
+older meals, bills and deposits are inserted with backdated timestamps. No mail
+is sent. A rerun deletes the demo manager's mess and every `@messmate.test`
+account first, so it resets the demo rather than doubling it. Those accounts use
+the demo member's password, and the managers the demo manager's.
+
 ### Scripts
 
 | Command                            | Does                                                                 |
@@ -471,8 +523,9 @@ Server starts at `http://localhost:5000`.
 | `pnpm build`                       | `prisma generate` + `tsup` — produces `dist/index.js` for deployment |
 | `pnpm start`                       | run the server locally                                               |
 | `pnpm typecheck`                   | `tsc --noEmit`                                                       |
-| `pnpm test`                        | 121 checks on Node's own test runner                                 |
+| `pnpm test`                        | 149 checks on Node's own test runner                                 |
 | `pnpm check:settlement`            | assert the settlement math balances                                  |
+| `pnpm seed:demo`                   | plan the demo data; `--write` replaces it (see above)                |
 | `pnpm check:all`                   | typecheck + lint + settlement + tests, the same set CI runs          |
 | `pnpm test:postman`                | drive the Postman collection through newman (`:local` for localhost) |
 | `pnpm lint:check` / `lint:fix`     | Biome lint                                                           |
@@ -587,12 +640,27 @@ against the production database after any schema change.
 
 ## Postman
 
-`postman/MessMate.postman_collection.json` — **125 requests across 19 folders**.
+`postman/MessMate.postman_collection.json` — **141 requests across 20 folders**.
 `baseUrl` already points at the live API, so importing and running it needs no
 edits.
 
-Run it top to bottom: tokens, `messId`, `cycleId`, `billId` and `paymentId` all
-chain themselves through the requests' test scripts.
+Run it top to bottom: tokens, `messId`, `joinCode`, `cycleId`, `billId` and
+`paymentId` all chain themselves through the requests' test scripts.
+
+**It runs on its own accounts.** A manager runs one mess and the demo manager
+already runs the demo mess, so the collection logs in as
+`postman.manager@messmate.test` and `postman.member@messmate.test`, which
+`pnpm seed:demo --write` creates with no mess. The run opens a mess, works in it
+and deletes it in Teardown; the demo data is never touched.
+
+**The Member folder is the consent flow.** The member previews the mess by its
+join code and asks to join; the manager finds the request and declines it, then
+invites the member by email; the member sees the invitation and accepts it; the
+manager rotates the join code. **Manager requests** has the member apply to run
+a mess, a second application refused with `409`, the admin's queue, a rejection
+without a reason refused with `400`, and the rejection with one — so the member
+stays a member. **Payment** starts a Stripe test checkout beside the bKash one,
+and shows the member refused when they try to leave with a bill unpaid.
 
 The order matters. Cleanup runs **Reopen → Remove member → Close → Delete mess**
 because two rules pull in opposite directions: a member cannot be released while
@@ -600,22 +668,24 @@ they owe money, and a mess cannot be deleted while a cycle is still OPEN.
 
 **Cash payments** runs between that re-close and **Teardown**'s final delete, and it has to. Recording a payment makes a month final — reopen is refused once money has landed against it — so any settled payment earlier in the run would stop Cleanup from reopening at all.
 
-Eight requests are marked **Manual step** and cannot be automated — a file has to
-be picked by hand (avatar, receipt), an OTP or refresh token pasted, or the bKash
-hosted page actually paid. Everything else passes against the deployed API:
+Run through newman against the deployed API on 2 October 2026:
 
 ```
-=== pass 83 | fail 0 | manual 8 | error 0 | total 91 ===
+requests 141 | failed 0 | assertions 67 | failed 0
 ```
 
-That run covered the 91 requests as submitted. Twelve more were added since,
-and each was run against a local server: the payment result page, the three
-**Scheduled jobs** requests, cycle bills and cash payments with their rejection
-paths, and the mess audit trail read by a manager and by a member. The member
-requests assert that every row returned is about that member, and that passing
-someone else's `?memberId=` does not widen it. The cron requests all use `?dryRun=true`, so they report
-who would be emailed and send nothing; they need `cronSecret` set to the same
-value as the server's `CRON_SECRET`.
+Every error case answered the status in its name. A few steps cannot be
+automated and answer an error until done by hand: the OTPs for verify-email and
+reset-password, a Google id token, the avatar file (upload, then remove), another
+manager's mess id for the cross-mess `403`, and the three scheduled-job dry runs,
+which need `cronSecret` set to the server's `CRON_SECRET`. The member requests in
+the audit trail assert that every row returned is about that member, and that
+passing someone else's `?memberId=` does not widen it. The cron requests all use
+`?dryRun=true`, so they report who would be emailed and send nothing.
+
+**Update profile** sends back the member's current name, read from the login
+token. The access token carries the name and the API checks it on every request,
+so a different name would sign the run's member out halfway.
 
 Eight more came with default meals, the settlement preview and the activity
 feed: the preview as manager and as member (the member's must hold exactly one
@@ -628,7 +698,7 @@ two `400`s (a category that does not fit, a future date), a filtered list, an
 update, all four summaries — each asserting that `balance` is income minus
 expense and that the breakdown has the right length, with the week starting on
 a Saturday — a manager getting `404` on a member's entry, and two deletes that
-leave the demo account as they found it.
+leave the account as they found it.
 
 `pnpm test:postman` runs the collection from the command line through newman,
 and `pnpm test:postman:local` points it at `localhost:5000`.
@@ -666,7 +736,7 @@ quote one value that finds it.
 - [x] bKash payment + idempotent callback
 - [x] Stripe card payments (test mode), confirmed server-side
 - [x] Admin operations — users, roles, block/unblock, audit logs, dashboard stats
-- [x] Postman collection — 125 requests, verified end to end
+- [x] Postman collection — 141 requests, verified end to end
 - [x] Deployment
 - [x] Demo video
 - [x] Half meals, deposit-funded groceries, the August 2026 ledger as a test
@@ -677,6 +747,10 @@ quote one value that finds it.
 - [x] Default meals, a nightly headcount for the manager, a running bill preview, and an activity feed with unread counts
 - [x] A private income and expense tracker with daily, weekly, monthly and yearly summaries
 - [x] Web frontend — [Messmate-frontend](https://github.com/Maptaul/Messmate-frontend) (Next.js 16, English + Bangla)
+- [x] Manager requests approved by an admin, and one mess per manager
+- [x] Joining a mess by consent — join codes, requests, invitations — and leaving it
+- [x] A carried balance is paid once; only the people who were there share a month
+- [x] Demo data: three messes, twelve members, three closed months
 
 Known limitations and what comes next: **[docs/ROADMAP.md](docs/ROADMAP.md)**.
 

@@ -3,7 +3,7 @@
 **Base URL:** `https://messmatebackend.vercel.app`
 **Local:** `http://localhost:5000`
 
-92 endpoints across 16 modules, all versioned under `/api/v1`. The runnable version of this reference is `postman/MessMate.postman_collection.json` — 125
+92 endpoints across 16 modules, all versioned under `/api/v1`. The runnable version of this reference is `postman/MessMate.postman_collection.json` — 141
 requests that chain their own tokens and ids.
 
 ---
@@ -26,6 +26,12 @@ Authorization: Bearer <accessToken>
 | `ADMIN` | `admin@messmate.app` | provided at submission |
 | `MESS_MANAGER` | `manager@messmate.app` | provided at submission |
 | `MEMBER` | `member@messmate.app` | provided at submission |
+
+`pnpm seed:demo --write` fills the demo mess and two more with three closed
+months, and adds `postman.manager@messmate.test` and
+`postman.member@messmate.test`, the pair the Postman collection runs as. Every
+`@messmate.test` account shares the demo member's password (managers: the demo
+manager's), and no mail is ever sent to that domain.
 
 ---
 
@@ -166,8 +172,8 @@ manager the address is not registered; and rejoining resets `joinedAt`.
 | GET | `/api/v1/cycle/mess-cycles/:messId` | `ADMIN` `MESS_MANAGER` `MEMBER` | — |  |
 | GET | `/api/v1/cycle/settlement-preview/:cycleId` | `ADMIN` `MESS_MANAGER` `MEMBER` | — | the bill if the month closed now; a member gets only their own line |
 | GET | `/api/v1/cycle/trends/:cycleId` | `ADMIN` `MESS_MANAGER` `MEMBER` | — | day-by-day meals, grocery and shared bills so far; see below |
-| POST | `/api/v1/cycle/close-cycle/:cycleId` | `ADMIN` `MESS_MANAGER` | — |  |
-| POST | `/api/v1/cycle/reopen-cycle/:cycleId` | `ADMIN` | — |  |
+| POST | `/api/v1/cycle/close-cycle/:cycleId` | `ADMIN` `MESS_MANAGER` | — | one bill per member who was there; last month's bills it opens with become `CARRIED` |
+| POST | `/api/v1/cycle/reopen-cycle/:cycleId` | `ADMIN` | — | 409 once money landed, or while a later month is closed; `CARRIED` bills get their balance back |
 | GET | `/api/v1/cycle/:cycleId` | `ADMIN` `MESS_MANAGER` `MEMBER` | — |  |
 
 ### Meal Register — `/api/v1/meal`
@@ -292,6 +298,23 @@ openingBalance + mealCost + sharedCost + rentShare + advanceCharged
 `creditAmount` is unchanged: the deposits recorded against *this* cycle plus the
 expenses this member paid out of pocket. A member who settles in full opens the
 next month at zero.
+
+**A carried balance is paid once.** The same close turns every previous bill it
+opened with into `status: CARRIED`, `dueAmount: 0`, so the balance lives only on
+the newest bill: paying the old one answers `409`, and the unpaid-bill reminder,
+the leave check and the admin's outstanding total all skip it. Bill statuses are
+`UNPAID`, `PARTIAL`, `PAID` and `CARRIED`.
+
+Reopening the month that carried them restores each one —
+`dueAmount = totalPayable − creditAmount − paidAmount`, `PARTIAL` if anything was
+paid, else `UNPAID` — and `billsRestored` is recorded in the audit row. Reopening
+an older month while a later one is closed answers
+`409 Reopen The Newest Closed Month First`, because the later month already
+opened with its balances.
+
+**Only the people who were there share a month.** A member with no day in the
+cycle (`joinedAt` after it, or `leftAt` before it) and no meal, deposit or
+out-of-pocket expense in it gets no bill and no share of the shared expenses.
 
 ### The settlement preview
 
