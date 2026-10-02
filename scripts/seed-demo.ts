@@ -242,6 +242,11 @@ const ASKER = {
 	note: "Rafiul bhai gave me the code. I can move in from the 10th.",
 };
 const INVITEE = { name: "Riyad Hasan", email: testEmail("riyad") };
+const POSTMAN_MANAGER = {
+	name: "Postman Manager",
+	email: testEmail("postman.manager"),
+};
+const POSTMAN_MEMBER = { name: "Postman Member", email: testEmail("postman.member") };
 const APPLICANT = {
 	name: "Mehedi Hasan",
 	email: testEmail("mehedi"),
@@ -900,6 +905,11 @@ const write = async (ledgers: Ledger[][], admin: Row) => {
 						updatedAt: x.createdAt,
 					})),
 				});
+
+	// The Postman collection's own pair. Neither lives in a mess, so a run opens
+	// one, works in it and deletes it, and never touches the demo messes.
+	await createUser(POSTMAN_MANAGER, Role.MESS_MANAGER, managerPassword, addDays(TODAY, -1));
+	await createUser(POSTMAN_MEMBER, Role.MEMBER, memberPassword, addDays(TODAY, -1));
 
 	// Waiting on someone: a request, an invitation and a manager application.
 	const asker = await createUser(ASKER, Role.MEMBER, memberPassword, addDays(TODAY, -2));
