@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "MessMate API",
-    "description": "MessMate - Smart Mess & Shared Housing Management Platform.\n\nLive: https://messmatebackend.vercel.app (default)\nFor a local server set the `baseUrl` collection variable to `http://localhost:5000`.\n\nVerified against the live deployment: 83 passed, 0 failed, 8 manual (file uploads, OTP paste, and the bKash hosted page).\n\n## How to use\n\n1. Run the three requests in **Auth / Login** first. Each one saves its own token into a collection variable (`adminToken`, `managerToken`, `memberToken`), so every later request is already authenticated for the right role.\n2. Run **Mess / Create mess** as the manager - it saves `messId`.\n3. Run **Member / Add member** then **Member / Get mess members** - the list saves `memberId`.\n4. The **Error cases** folder is the three-role demo: every request there is expected to fail, with the status noted in its name.\n\n## Seeded accounts\n\n| Role | Email |\n|---|---|\n| ADMIN | admin@messmate.app |\n| MESS_MANAGER | manager@messmate.app |\n| MEMBER | member@messmate.app |\n\nPasswords come from the environment file used at deploy time.\n\n## Registration is two step\n\n`POST /auth/register` does not create the account. It mails a six digit OTP and parks the signup in Redis for five minutes. `POST /auth/verify-email` with that code creates the user and returns tokens. Use the seeded accounts above for everything else, so you do not have to open a mailbox.\n\n## Response shape\n\nSuccess: `{ success, statusCode, message, data, meta? }`\nError: `{ success, statusCode, message, errors: [] }`",
+    "description": "MessMate - Smart Mess & Shared Housing Management Platform.\n\nLive: https://messmatebackend.vercel.app (default)\nFor a local server set the `baseUrl` collection variable to `http://localhost:5000`.\n\nVerified against the live deployment on 2 October 2026 with newman: 141 requests, 67 assertions, 0 failed. Manual steps: the two OTPs, a Google id token, the avatar file, another manager mess id, and `cronSecret` for the scheduled-job dry runs.\n\n## How to use\n\n1. Run the three requests in **Auth / Login** first. Each one saves its own token into a collection variable (`adminToken`, `managerToken`, `memberToken`), so every later request is already authenticated for the right role.\n2. Run **Mess / Create mess** as the manager - it saves `messId` and `joinCode`.\n3. Run the **Member** folder in order: the member asks with the code, the manager declines, then invites, and the member accepts. **Get mess members** saves `memberId`.\n4. The **Error cases** folder is the three-role demo: every request there is expected to fail, with the status noted in its name.\n\n## Seeded accounts\n\n| Role | Email |\n|---|---|\n| ADMIN | admin@messmate.app |\n| MESS_MANAGER | manager@messmate.app (runs the demo mess) |\n| MEMBER | member@messmate.app |\n| MESS_MANAGER | postman.manager@messmate.test (this collection; has no mess) |\n| MEMBER | postman.member@messmate.test (this collection; joins the run's mess) |\n\nA manager runs one mess, and the demo manager already runs the demo mess. So the collection logs in as its own pair, created by `pnpm seed:demo --write`, opens a mess, and deletes it in Teardown: a run never touches the demo data.\n\nPasswords come from the environment file used at deploy time.\n\n## Registration is two step\n\n`POST /auth/register` does not create the account. It mails a six digit OTP and parks the signup in Redis for five minutes. `POST /auth/verify-email` with that code creates the user and returns tokens. Use the seeded accounts above for everything else, so you do not have to open a mailbox.\n\n## Response shape\n\nSuccess: `{ success, statusCode, message, data, meta? }`\nError: `{ success, statusCode, message, errors: [] }`",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -31,7 +31,7 @@
     },
     {
       "key": "managerEmail",
-      "value": "manager@messmate.app"
+      "value": "postman.manager@messmate.test"
     },
     {
       "key": "managerPassword",
@@ -39,7 +39,7 @@
     },
     {
       "key": "memberEmail",
-      "value": "member@messmate.app"
+      "value": "postman.member@messmate.test"
     },
     {
       "key": "memberPassword",
@@ -168,6 +168,26 @@
     {
       "key": "financeIncomeId",
       "value": ""
+    },
+    {
+      "key": "joinCode",
+      "value": ""
+    },
+    {
+      "key": "joinRequestId",
+      "value": ""
+    },
+    {
+      "key": "inviteId",
+      "value": ""
+    },
+    {
+      "key": "managerRequestId",
+      "value": ""
+    },
+    {
+      "key": "memberName",
+      "value": ""
     }
   ],
   "item": [
@@ -227,7 +247,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Tarek Islam\",\n  \"email\": \"tarek.demo@example.com\",\n  \"password\": \"Tarek@mess123\",\n  \"phone\": \"01700000000\",\n  \"role\": \"MEMBER\"\n}"
+              "raw": "{\n  \"name\": \"Tarek Islam\",\n  \"email\": \"tarek.demo@messmate.test\",\n  \"password\": \"Tarek@mess123\",\n  \"phone\": \"01700000000\",\n  \"role\": \"MEMBER\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/auth/register",
@@ -344,8 +364,8 @@
                   "pm.collectionVariables.set(\"cycleYear\", String(year));",
                   "pm.collectionVariables.set(\"cycleMonth\", String(month + 1));",
                   "",
-                  "// Meals and expenses are recorded for today: the demo member joined the mess",
-                  "// moments ago, and nothing may be dated before they joined.",
+                  "// Meals and expenses are recorded for today: the Postman member joins the",
+                  "// mess moments before, and nothing may be dated before they joined.",
                   "pm.collectionVariables.set(\"mealDate\", iso(today));",
                   "pm.collectionVariables.set(\"expenseDate\", iso(today));",
                   "pm.collectionVariables.set(\"dutyStart\", iso(today));",
@@ -402,6 +422,15 @@
                   "if (res?.data?.accessToken) {",
                   "  pm.collectionVariables.set('memberToken', res.data.accessToken);",
                   "  console.log('memberToken saved');",
+                  "}",
+                  "",
+                  "// The token carries the name, and Update profile sends it back unchanged:",
+                  "// a different name would sign this token out for the rest of the run.",
+                  "if (res?.data?.accessToken) {",
+                  "  const part = res.data.accessToken.split(\".\")[1].replace(/-/g, \"+\").replace(/_/g, \"/\");",
+                  "  const padded = part + \"=\".repeat((4 - (part.length % 4)) % 4);",
+                  "  const claims = JSON.parse(CryptoJS.enc.Base64.parse(padded).toString(CryptoJS.enc.Utf8));",
+                  "  pm.collectionVariables.set(\"memberName\", claims.name);",
                   "}"
                 ]
               }
@@ -616,7 +645,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Tazjim Arman\",\n  \"phone\": \"01812345678\"\n}"
+              "raw": "{\n  \"name\": \"{{memberName}}\",\n  \"phone\": \"01812345678\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/user/update-profile",
@@ -630,7 +659,7 @@
                 "update-profile"
               ]
             },
-            "description": "Name and phone only. Email, role and status are not editable here - changing a role is an admin action, not a profile edit."
+            "description": "Name and phone only. Email, role and status are not editable here - changing a role is an admin action, not a profile edit. The token carries the name, so a new name signs the account in again; this run sends back the name from the login token to keep it."
           }
         },
         {
@@ -710,6 +739,10 @@
                   "if (res?.data?.id) {",
                   "  pm.collectionVariables.set('messId', res.data.id);",
                   "  console.log('messId saved:', res.data.id);",
+                  "}",
+                  "if (res?.data?.joinCode) {",
+                  "  pm.collectionVariables.set('joinCode', res.data.joinCode);",
+                  "  console.log('joinCode saved:', res.data.joinCode);",
                   "}"
                 ]
               }
@@ -743,7 +776,7 @@
                 "create-mess"
               ]
             },
-            "description": "monthlyDeposit is the advance every member is charged each month for the coming month's bazaar fund. It appears on the bill as \"Next month's deposit\", and whatever a member has actually handed over is recorded as a Deposit against the cycle it funds. Leave it out or send 0 and the mess behaves as it did before - no advance, no carry-forward."
+            "description": "monthlyDeposit is the advance every member is charged each month for the coming month's bazaar fund. It appears on the bill as \"Next month's deposit\", and whatever a member has actually handed over is recorded as a Deposit against the cycle it funds. Leave it out or send 0 and the mess behaves as it did before - no advance, no carry-forward.\n\nA manager runs one mess: a second create answers 409 until this one is deleted. That is why the collection logs in as its own Postman manager, who has no mess, and deletes this one in Teardown.\n\nSaves `messId` and `joinCode` automatically."
           }
         },
         {
@@ -953,18 +986,212 @@
       "name": "Member",
       "item": [
         {
-          "name": "Add member (Manager)",
+          "name": "Join code preview (Member) - who runs the mess, before asking",
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "const res = pm.response.json();",
-                  "if (res?.data?.id) {",
-                  "  pm.collectionVariables.set('memberId', res.data.id);",
-                  "  console.log('memberId saved:', res.data.id);",
-                  "}"
+                  "pm.test(\"the code finds the mess\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('only what a stranger may see', function () {",
+                  "  const d = pm.response.json().data;",
+                  "  pm.expect(d).to.have.property('name');",
+                  "  pm.expect(d).to.not.have.property('members');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{memberToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/membership/join-code/{{joinCode}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "membership",
+                "join-code",
+                "{{joinCode}}"
+              ]
+            },
+            "description": "Name, address, manager and member count only. Lowercase and a dash are fine (`b63-296` reads as `B63296`). There is no public list of messes: the code is the only way in."
+          }
+        },
+        {
+          "name": "Ask to join with the code (Member)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"the request is waiting\", function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "const d = pm.response.json().data;",
+                  "if (d?.id) pm.collectionVariables.set('joinRequestId', d.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{memberToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"joinCode\": \"{{joinCode}}\",\n  \"note\": \"I moved into room 2 this week.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/membership/request",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "membership",
+                "request"
+              ]
+            },
+            "description": "One waiting request or invitation per person per mess (a partial unique index). Saves `joinRequestId`."
+          }
+        },
+        {
+          "name": "Requests waiting on the mess (Manager)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"the manager sees the queue\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('the new request is in it', function () {",
+                  "  const ids = (pm.response.json().data || []).map(function (r) { return r.id; });",
+                  "  pm.expect(ids).to.include(pm.collectionVariables.get('joinRequestId'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/membership/mess/{{messId}}?status=PENDING&kind=REQUEST&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "membership",
+                "mess",
+                "{{messId}}"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "PENDING"
+                },
+                {
+                  "key": "kind",
+                  "value": "REQUEST"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "`kind=REQUEST` or `kind=INVITE`, `status=PENDING|ACCEPTED|DECLINED|CANCELLED`. An invitee shows only as the email the manager typed until they accept."
+          }
+        },
+        {
+          "name": "Decline the request (Manager)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"declined\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('nothing was joined', function () {",
+                  "  pm.expect(pm.response.json().data.status).to.eql('DECLINED');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/membership/{{joinRequestId}}/decline",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "membership",
+                "{{joinRequestId}}",
+                "decline"
+              ]
+            },
+            "description": "A request is answered by the mess's manager or an admin; an invitation only by the person invited. The asker gets an email either way."
+          }
+        },
+        {
+          "name": "Invite member (Manager)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"the invitation is out\", function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "const d = pm.response.json().data;",
+                  "if (d?.id) pm.collectionVariables.set('inviteId', d.id);",
+                  "pm.test('the answer echoes only the email', function () {",
+                  "  pm.expect(d).to.not.have.property('name');",
+                  "});"
                 ]
               }
             }
@@ -986,18 +1213,101 @@
               "raw": "{\n  \"messId\": \"{{messId}}\",\n  \"email\": \"{{memberEmail}}\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/api/v1/member/add-member",
+              "raw": "{{baseUrl}}/api/v1/membership/invite",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "api",
                 "v1",
-                "member",
-                "add-member"
+                "membership",
+                "invite"
               ]
             },
-            "description": "Adds an existing registered user by email.\n\nIf that person left this mess before, the original membership row is restored rather than a second one being inserted - the unique constraint on (messId, userId) means the old row still holds the slot. joinedAt resets, because rent is prorated from it.\n\nSaves `memberId` automatically."
+            "description": "Replaces the old `POST /member/add-member`, which added people without asking them. The invitee gets an email; their name stays hidden from the manager until they accept. Saves `inviteId`."
+          }
+        },
+        {
+          "name": "My invitations and requests (Member)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"the member sees what waits on them\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('the invitation is there', function () {",
+                  "  const ids = (pm.response.json().data || []).map(function (r) { return r.id; });",
+                  "  pm.expect(ids).to.include(pm.collectionVariables.get('inviteId'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{memberToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/membership/my",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "membership",
+                "my"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Accept the invitation (Member)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"accepted\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('now a member', function () {",
+                  "  pm.expect(pm.response.json().data.status).to.eql('ACCEPTED');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{memberToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/membership/{{inviteId}}/accept",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "membership",
+                "{{inviteId}}",
+                "accept"
+              ]
+            },
+            "description": "Creates the membership (or reactivates a LEFT one) in the same transaction that claims the invitation, and writes a MEMBER_JOINED audit row."
           }
         },
         {
@@ -1016,7 +1326,7 @@
                   "  pm.collectionVariables.set('memberId', removable.id);",
                   "  console.log('memberId saved:', removable.id);",
                   "} else {",
-                  "  console.log('no removable member found - run Add member first');",
+                  "  console.log('no removable member found - run Accept the invitation first');",
                   "}",
                   "",
                   "const rows = pm.response.json().data || [];",
@@ -1103,8 +1413,53 @@
             },
             "description": "A member sees only their own memberships, never anyone else."
           }
+        },
+        {
+          "name": "New join code (Manager) - the old one stops working",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"a fresh code\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "const d = pm.response.json().data;",
+                  "pm.test('it changed', function () {",
+                  "  pm.expect(d.joinCode).to.not.eql(pm.collectionVariables.get('joinCode'));",
+                  "});",
+                  "if (d?.joinCode) pm.collectionVariables.set('joinCode', d.joinCode);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/membership/mess/{{messId}}/join-code",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "membership",
+                "mess",
+                "{{messId}}",
+                "join-code"
+              ]
+            }
+          }
         }
-      ]
+      ],
+      "description": "Nobody joins a mess without agreeing to it. A member asks with the mess's six-character join code and the manager approves or declines; or the manager invites by email and the member accepts or declines. Both live in `membership_requests`; only an accepted one creates (or reactivates) the membership.\n\nRun in order: the request is declined on purpose, then the invitation is accepted."
     },
     {
       "name": "Cycle",
@@ -2754,6 +3109,94 @@
           ]
         },
         {
+          "name": "Start a card checkout (Member) - Stripe test mode",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"a Stripe Checkout page\", function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test('the member is sent to Stripe', function () {",
+                  "  pm.expect(pm.response.json().data.checkoutUrl).to.match(/^https:\\/\\/checkout\\.stripe\\.com/);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{memberToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"billId\": \"{{billId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payment/create-stripe-session",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payment",
+                "create-stripe-session"
+              ]
+            },
+            "description": "Open `checkoutUrl` and pay with 4242 4242 4242 4242, any future date, any CVC. Stripe returns to the frontend, which calls `POST /payment/confirm-stripe` with the session id; the bill is settled only after Stripe says the session is paid."
+          }
+        },
+        {
+          "name": "409 - leave the mess with a bill unpaid (Member)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"an unpaid bill keeps them in\", function () {",
+                  "  pm.response.to.have.status(409);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{memberToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/member/leave/{{messId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "member",
+                "leave",
+                "{{messId}}"
+              ]
+            },
+            "description": "`PATCH /member/leave/:messId` lets a member leave on their own once every bill is paid. Their meals and bills stay with the months they belong to."
+          }
+        },
+        {
           "name": "Get my payments (Member)",
           "request": {
             "method": "GET",
@@ -4001,6 +4444,249 @@
       ]
     },
     {
+      "name": "Manager requests",
+      "description": "Nobody becomes a mess manager by signing up. A member (or someone registering with a mess name and address) files a request; an admin approves it, which makes them MESS_MANAGER, or rejects it with a reason. Each request is kept as its own row, and only one may wait at a time.\n\nThe run rejects on purpose, so the Postman member stays a member.",
+      "item": [
+        {
+          "name": "Apply to run a mess (Member)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"the request is waiting\", function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "const d = pm.response.json().data;",
+                  "if (d?.id) pm.collectionVariables.set('managerRequestId', d.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{memberToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"messName\": \"Lake Road Mess {{runId}}\",\n  \"messAddress\": \"Road 4, Mohammadpur, Dhaka\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/manager-request/apply",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "manager-request",
+                "apply"
+              ]
+            }
+          }
+        },
+        {
+          "name": "409 - apply again while one is waiting (Member)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"one waiting request at a time\", function () {",
+                  "  pm.response.to.have.status(409);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{memberToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"messName\": \"Another Mess\",\n  \"messAddress\": \"Road 5, Mohammadpur, Dhaka\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/manager-request/apply",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "manager-request",
+                "apply"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Waiting requests (Admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"the admin queue\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('the new request is in it', function () {",
+                  "  const ids = (pm.response.json().data || []).map(function (r) { return r.id; });",
+                  "  pm.expect(ids).to.include(pm.collectionVariables.get('managerRequestId'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/manager-request/all-requests?status=PENDING&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "manager-request",
+                "all-requests"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "PENDING"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "400 - reject without a reason (Admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"a rejection needs a reason\", function () {",
+                  "  pm.response.to.have.status(400);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"requestId\": \"{{managerRequestId}}\",\n  \"status\": \"REJECTED\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/manager-request/review",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "manager-request",
+                "review"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Reject with a reason (Admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"rejected\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('the reason is kept', function () {",
+                  "  pm.expect(pm.response.json().data.status).to.eql('REJECTED');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"requestId\": \"{{managerRequestId}}\",\n  \"status\": \"REJECTED\",\n  \"rejectionReason\": \"Please add the house and road number so we can check the mess.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/manager-request/review",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "manager-request",
+                "review"
+              ]
+            },
+            "description": "Approving (`status: APPROVED`) makes the applicant MESS_MANAGER; their next token refresh carries the new role. Either answer is emailed and audited (MANAGER_APPROVED / MANAGER_REJECTED)."
+          }
+        }
+      ]
+    },
+    {
       "name": "Error cases (three role demo)",
       "description": "Every request here is expected to FAIL. The status code is in the name. This folder is the role isolation demonstration.",
       "item": [
@@ -4270,7 +4956,20 @@
           }
         },
         {
-          "name": "409 - add the same member twice",
+          "name": "409 - invite someone who already lives here",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"already a member\", function () {",
+                  "  pm.response.to.have.status(409);",
+                  "});"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -4288,22 +4987,34 @@
               "raw": "{\n  \"messId\": \"{{messId}}\",\n  \"email\": \"{{memberEmail}}\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/api/v1/member/add-member",
+              "raw": "{{baseUrl}}/api/v1/membership/invite",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "api",
                 "v1",
-                "member",
-                "add-member"
+                "membership",
+                "invite"
               ]
-            },
-            "description": "Send this twice. The second call returns 409."
+            }
           }
         },
         {
           "name": "400 - admin cannot be a mess member",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"admins are not mess members\", function () {",
+                  "  pm.response.to.have.status(400);",
+                  "});"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -4321,15 +5032,98 @@
               "raw": "{\n  \"messId\": \"{{messId}}\",\n  \"email\": \"{{adminEmail}}\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/api/v1/member/add-member",
+              "raw": "{{baseUrl}}/api/v1/membership/invite",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "api",
                 "v1",
-                "member",
-                "add-member"
+                "membership",
+                "invite"
+              ]
+            }
+          }
+        },
+        {
+          "name": "409 - a manager opens a second mess",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"one mess per manager\", function () {",
+                  "  pm.response.to.have.status(409);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Second Mess\",\n  \"address\": \"Road 2, Mirpur, Dhaka\",\n  \"monthlyRent\": 10000\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/mess/create-mess",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "mess",
+                "create-mess"
+              ]
+            }
+          }
+        },
+        {
+          "name": "404 - a join code no mess has",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"no such mess\", function () {",
+                  "  pm.response.to.have.status(404);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{memberToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/membership/join-code/000000",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "membership",
+                "join-code",
+                "000000"
               ]
             }
           }
@@ -4508,7 +5302,7 @@
                 "{{memberId}}"
               ]
             },
-            "description": "Sets status LEFT with leftAt rather than deleting, so their meals and expenses stay attached to the months they belong to and rent stays prorated to the day they left.\n\nRefuses with 409 if they still have an unpaid bill. Writes a MEMBER_REMOVED audit row inside the same transaction.\n\nKept in Cleanup on purpose: it sets the member to LEFT, and the duplicate-add case in Error cases expects them to still be ACTIVE. Running it earlier turns that 409 into a 201, because re-adding someone who left restores their old membership row instead of conflicting."
+            "description": "Sets status LEFT with leftAt rather than deleting, so their meals and expenses stay attached to the months they belong to and rent stays prorated to the day they left.\n\nRefuses with 409 if they still have an unpaid bill. Writes a MEMBER_REMOVED audit row inside the same transaction.\n\nKept in Cleanup on purpose: it sets the member to LEFT, and the invitation error case expects them to still be an active member."
           }
         },
         {
