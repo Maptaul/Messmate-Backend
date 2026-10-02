@@ -2,6 +2,7 @@ import httpStatus from "http-status";
 import type { Prisma } from "../../../generated/prisma/client";
 import {
 	AuditAction,
+	BillStatus,
 	CycleStatus,
 	MemberStatus,
 	PaymentStatus,
@@ -21,6 +22,8 @@ import {
 	computeSettlement,
 	depositFundedGroceryWarning,
 	type SettlementMember,
+	sharesTheMonth,
+	uncarriedBill,
 } from "./cycle.settlement";
 import { buildCycleTrends } from "./cycle.trends";
 
@@ -37,6 +40,12 @@ const cycleSelect = {
 	mess: { select: { id: true, name: true, monthlyRent: true } },
 	closedBy: { select: { id: true, name: true } },
 };
+
+// Cycles of the same mess that come before year/month.
+const earlierThan = (year: number, month: number) => [
+	{ year: { lt: year } },
+	{ year, month: { lt: month } },
+];
 
 const daysInMonth = (year: number, month: number) =>
 	new Date(year, month, 0).getDate();
@@ -137,14 +146,11 @@ const loadSettlement = async (
 		where: {
 			messId: cycle.messId,
 			status: CycleStatus.CLOSED,
-			OR: [
-				{ year: { lt: cycle.year } },
-				{ year: cycle.year, month: { lt: cycle.month } },
-			],
+			OR: earlierThan(cycle.year, cycle.month),
 		},
 		orderBy: [{ year: "desc" }, { month: "desc" }],
 		select: {
-			bills: { select: { memberId: true, dueAmount: true } },
+			bills: { select: { id: true, memberId: true, dueAmount: true } },
 		},
 	});
 
@@ -155,19 +161,28 @@ const loadSettlement = async (
 		]),
 	);
 
-	const settlementMembers: SettlementMember[] = members.map((member) => ({
-		memberId: member.id,
-		mealCount: mealByMember.get(member.id) ?? 0,
-		depositTotal: depositByMember.get(member.id) ?? 0,
-		paidExpenseTotal: paidByMember.get(member.id) ?? 0,
-		openingBalance: openingByMember.get(member.id) ?? 0,
-		daysPresent: daysPresentInCycle(
-			cycle.year,
-			cycle.month,
-			member.joinedAt,
-			member.leftAt,
-		),
-	}));
+	const settlementMembers: SettlementMember[] = members
+		.map((member) => ({
+			memberId: member.id,
+			mealCount: mealByMember.get(member.id) ?? 0,
+			depositTotal: depositByMember.get(member.id) ?? 0,
+			paidExpenseTotal: paidByMember.get(member.id) ?? 0,
+			openingBalance: openingByMember.get(member.id) ?? 0,
+			daysPresent: daysPresentInCycle(
+				cycle.year,
+				cycle.month,
+				member.joinedAt,
+				member.leftAt,
+			),
+		}))
+		.filter(sharesTheMonth);
+
+	const billed = new Set(settlementMembers.map((member) => member.memberId));
+
+	// Last month's balances that open this month's bills.
+	const carriedBillIds = (previousCycle?.bills ?? [])
+		.filter((bill) => billed.has(bill.memberId) && Number(bill.dueAmount) !== 0)
+		.map((bill) => bill.id);
 
 	const result = computeSettlement({
 		members: settlementMembers,
@@ -189,7 +204,12 @@ const loadSettlement = async (
 		expenses,
 	});
 
-	return { members, result, warnings: warning ? [warning] : [] };
+	return {
+		members: members.filter((member) => billed.has(member.id)),
+		result,
+		warnings: warning ? [warning] : [],
+		carriedBillIds,
+	};
 };
 
 const openCycle = async (payload: IOpenCyclePayload, user: RequestUser) => {
@@ -463,14 +483,17 @@ const closeCycle = async (cycleId: string, user: RequestUser) => {
 			throw new AppError(httpStatus.CONFLICT, "This Cycle Is Already Closed");
 		}
 
-		const { members, result, warnings } = await loadSettlement(tx, {
-			id: cycleId,
-			year: cycle.year,
-			month: cycle.month,
-			messId: cycle.messId,
-			monthlyRent: Number(cycle.mess.monthlyRent),
-			monthlyDeposit: Number(cycle.mess.monthlyDeposit),
-		});
+		const { members, result, warnings, carriedBillIds } = await loadSettlement(
+			tx,
+			{
+				id: cycleId,
+				year: cycle.year,
+				month: cycle.month,
+				messId: cycle.messId,
+				monthlyRent: Number(cycle.mess.monthlyRent),
+				monthlyDeposit: Number(cycle.mess.monthlyDeposit),
+			},
+		);
 
 		if (result.bills.length > 0) {
 			await tx.memberBill.createMany({
@@ -487,6 +510,12 @@ const closeCycle = async (cycleId: string, user: RequestUser) => {
 				})),
 			});
 		}
+
+		// Their balance now opens this month's bill, so the old bill stops asking for it.
+		await tx.memberBill.updateMany({
+			where: { id: { in: carriedBillIds } },
+			data: { dueAmount: 0, status: BillStatus.CARRIED },
+		});
 
 		const closed = await tx.billingCycle.update({
 			where: { id: cycleId },
@@ -563,6 +592,26 @@ const reopenCycle = async (cycleId: string, user: RequestUser) => {
 		throw new AppError(httpStatus.CONFLICT, "This Cycle Is Already Open");
 	}
 
+	// A later month opened with this one's balances, so it has to go first.
+	const laterClosed = await prisma.billingCycle.findFirst({
+		where: {
+			messId: cycle.messId,
+			status: CycleStatus.CLOSED,
+			OR: [
+				{ year: { gt: cycle.year } },
+				{ year: cycle.year, month: { gt: cycle.month } },
+			],
+		},
+		select: { id: true },
+	});
+
+	if (laterClosed) {
+		throw new AppError(
+			httpStatus.CONFLICT,
+			"Reopen The Newest Closed Month First",
+		);
+	}
+
 	const paidBill = await prisma.memberBill.findFirst({
 		where: {
 			cycleId,
@@ -604,6 +653,39 @@ const reopenCycle = async (cycleId: string, user: RequestUser) => {
 	const reopened = await prisma.$transaction(async (tx) => {
 		const removed = await tx.memberBill.deleteMany({ where: { cycleId } });
 
+		const previous = await tx.billingCycle.findFirst({
+			where: {
+				messId: cycle.messId,
+				status: CycleStatus.CLOSED,
+				OR: earlierThan(cycle.year, cycle.month),
+			},
+			orderBy: [{ year: "desc" }, { month: "desc" }],
+			select: {
+				bills: {
+					where: { status: BillStatus.CARRIED },
+					select: {
+						id: true,
+						totalPayable: true,
+						creditAmount: true,
+						paidAmount: true,
+					},
+				},
+			},
+		});
+
+		const restored = previous?.bills ?? [];
+
+		for (const bill of restored) {
+			await tx.memberBill.update({
+				where: { id: bill.id },
+				data: uncarriedBill({
+					totalPayable: Number(bill.totalPayable),
+					creditAmount: Number(bill.creditAmount),
+					paidAmount: Number(bill.paidAmount),
+				}),
+			});
+		}
+
 		const reopened = await tx.billingCycle.update({
 			where: { id: cycleId },
 			data: {
@@ -624,7 +706,11 @@ const reopenCycle = async (cycleId: string, user: RequestUser) => {
 			entity: "BillingCycle",
 			entityId: cycleId,
 			before: { status: CycleStatus.CLOSED },
-			after: { status: CycleStatus.OPEN, billsRemoved: removed.count },
+			after: {
+				status: CycleStatus.OPEN,
+				billsRemoved: removed.count,
+				billsRestored: restored.length,
+			},
 		});
 
 		return reopened;

@@ -194,6 +194,29 @@ export type FundGroceryCheckInput = {
 	expenses: { type: ExpenseType; paidByMemberId: string | null }[];
 };
 
+// Someone who was not in the mess any day of the month, with nothing of theirs
+// recorded in it, shares none of its bills.
+export const sharesTheMonth = (member: SettlementMember) =>
+	member.daysPresent > 0 ||
+	member.mealCount > 0 ||
+	member.depositTotal > 0 ||
+	member.paidExpenseTotal > 0;
+
+// A carried bill's balance moved into the next month's opening. Reopening that
+// month gives the balance back to the bill it came from.
+export const uncarriedBill = (bill: {
+	totalPayable: number;
+	creditAmount: number;
+	paidAmount: number;
+}) => ({
+	dueAmount: toTaka(
+		toPaisa(bill.totalPayable) -
+			toPaisa(bill.creditAmount) -
+			toPaisa(bill.paidAmount),
+	),
+	status: bill.paidAmount > 0 ? ("PARTIAL" as const) : ("UNPAID" as const),
+});
+
 export const depositFundedGroceryWarning = (
 	input: FundGroceryCheckInput,
 ): string | null => {

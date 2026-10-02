@@ -4,6 +4,8 @@ import { test } from "node:test";
 import {
 	computeSettlement,
 	type SettlementInput,
+	sharesTheMonth,
+	uncarriedBill,
 } from "../src/app/module/cycle/cycle.settlement";
 
 const DEPOSIT = 600;
@@ -120,4 +122,43 @@ test("the deposit charged this month is the credit that clears next month", () =
 	);
 
 	assert.equal(august.advanceCharged, septemberIfPaid.depositTotal);
+});
+
+test("someone who left before the month shares none of its bills", () => {
+	const gone = {
+		memberId: "jubayer",
+		mealCount: 0,
+		depositTotal: 0,
+		paidExpenseTotal: 0,
+		openingBalance: -300,
+		daysPresent: 0,
+	};
+
+	assert.equal(sharesTheMonth(gone), false);
+	assert.equal(sharesTheMonth({ ...gone, daysPresent: 15 }), true);
+	assert.equal(sharesTheMonth({ ...gone, depositTotal: 500 }), true);
+});
+
+test("reopening the month that carried a bill gives the bill its balance back", () => {
+	const august = billFrom(month({ meals: 10, grocery: 1000 }));
+
+	assert.deepEqual(
+		uncarriedBill({
+			totalPayable: august.totalPayable,
+			creditAmount: august.creditAmount,
+			paidAmount: 0,
+		}),
+		{ dueAmount: august.dueAmount, status: "UNPAID" },
+	);
+	assert.deepEqual(
+		uncarriedBill({ totalPayable: 2100, creditAmount: 600, paidAmount: 500.5 }),
+		{ dueAmount: 999.5, status: "PARTIAL" },
+	);
+});
+
+test("a carried credit comes back as a credit", () => {
+	assert.deepEqual(
+		uncarriedBill({ totalPayable: 800, creditAmount: 1500, paidAmount: 0 }),
+		{ dueAmount: -700, status: "UNPAID" },
+	);
 });
