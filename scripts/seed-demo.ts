@@ -774,7 +774,14 @@ const writeMess = async (
 			monthlyRent: mess.monthlyRent,
 			managerId: manager.id,
 			createdAt: at(FOUNDED, 11),
-			members: { create: { userId: manager.id, joinedAt: at(FOUNDED, 11) } },
+			members: {
+				create: {
+					userId: manager.id,
+					joinedAt: at(FOUNDED, 11),
+					defaultLunch: 1,
+					defaultDinner: 1,
+				},
+			},
 		},
 		select: { id: true, joinCode: true, members: { select: { id: true } } },
 	});
@@ -943,7 +950,12 @@ const report = async (written: Awaited<ReturnType<typeof write>>) => {
 				member: { select: { user: { select: { name: true, email: true } } } },
 			},
 		});
-		console.log(`\n${mess.name}  join code ${written[n]!.joinCode}`);
+		const carried = await prisma.memberBill.count({
+			where: { cycle: { messId: written[n]!.id }, status: "CARRIED" },
+		});
+		console.log(
+			`\n${mess.name}  join code ${written[n]!.joinCode}, ${carried} bill(s) carried forward`,
+		);
 		console.table(
 			bills.map((b) => ({
 				name: b.member.user.name,
