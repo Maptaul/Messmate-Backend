@@ -12,6 +12,13 @@ export const isCredentialRoute = (req: Pick<Request, "originalUrl">) =>
 	req.originalUrl.startsWith("/api/v1/auth") &&
 	!SESSION_ROUTE.test(req.originalUrl);
 
+// Logout only clears the cookies, so a user who ran out of requests can still
+// sign out; the bKash callback comes from the gateway, not a user.
+const UNLIMITED_ROUTE = /^\/api\/v1\/(auth\/logout|payment\/callback)(\/|\?|$)/;
+
+export const skipsGeneralLimit = (req: Pick<Request, "originalUrl">) =>
+	isCredentialRoute(req) || UNLIMITED_ROUTE.test(req.originalUrl);
+
 type TLimitRequest = Pick<Request, "ip" | "cookies" | "body">;
 
 const ipKey = (req: TLimitRequest) => ipKeyGenerator(req.ip ?? "");

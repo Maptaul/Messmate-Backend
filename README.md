@@ -721,8 +721,8 @@ back will start answering 429.
 
 Passwords hashed with bcrypt · Bearer JWT with separate access and refresh
 secrets · role and account status checked against the **database** row, not the
-token payload · `helmet` · CORS allow-list · rate limiting (300/15 min general,
-30/15 min on `/auth`, bKash callback exempt) · scheduled-job endpoints behind a
+token payload · `helmet` · CORS allow-list · rate limiting (1000/15 min general,
+30/15 min on `/auth`, logout and bKash callback exempt) · scheduled-job endpoints behind a
 shared secret compared in constant time · list `limit` clamped to 100 · every
 secret read through `src/app/config`.
 

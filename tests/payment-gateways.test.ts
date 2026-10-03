@@ -8,6 +8,7 @@ import {
 	credentialLimitKey,
 	generalLimitKey,
 	isCredentialRoute,
+	skipsGeneralLimit,
 } from "../src/app/utils/credentialRoute";
 
 const paid = { payment_status: "paid", currency: "bdt", amount_total: 1385050 };
@@ -36,6 +37,17 @@ test("only password and OTP endpoints get the strict auth budget", () => {
 	assert.equal(credential("/api/v1/auth/logout"), false);
 	assert.equal(credential("/api/v1/auth/merge"), true);
 	assert.equal(credential("/api/v1/mess/my-messes"), false);
+});
+
+test("logout and the bKash callback skip the general budget, everything else counts", () => {
+	const skips = (originalUrl: string) => skipsGeneralLimit({ originalUrl });
+
+	assert.equal(skips("/api/v1/auth/logout"), true);
+	assert.equal(skips("/api/v1/payment/callback?paymentID=x&status=success"), true);
+	assert.equal(skips("/api/v1/auth/login"), true);
+	assert.equal(skips("/api/v1/auth/me"), false);
+	assert.equal(skips("/api/v1/payment/my-bills"), false);
+	assert.equal(skips("/api/v1/mess/my-messes"), false);
 });
 
 test("signed-in requests count against their user, everyone else against the IP", () => {

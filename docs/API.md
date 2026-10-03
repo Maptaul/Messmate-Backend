@@ -76,7 +76,7 @@ reports a failure, that one value finds the log entry behind it.
 | 403 | Wrong role, blocked account, or another mess's resource |
 | 404 | Row does not exist |
 | 409 | Business conflict — closed cycle, duplicate entry, missed cutoff |
-| 429 | Rate limited (300 per 15 min; 30 on `/auth`) |
+| 429 | Rate limited (1000 per 15 min; 30 on `/auth`) |
 
 ---
 

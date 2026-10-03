@@ -6,9 +6,14 @@ import {
 	credentialLimitKey,
 	generalLimitKey,
 	isCredentialRoute,
+	skipsGeneralLimit,
 } from "../utils/credentialRoute";
 
 const WINDOW_MS = 15 * 60 * 1000;
+
+// One dashboard page costs the frontend 12–17 API calls, so 300 ran out after
+// about 20 pages. 1000 is roughly a page every 13 seconds for 15 minutes.
+const GENERAL_LIMIT = 1000;
 
 const tooManyRequests = (message: string) => ({
 	success: false,
@@ -30,15 +35,13 @@ const redisStore = (prefix: string) =>
 
 export const generalLimiter = rateLimit({
 	windowMs: WINDOW_MS,
-	limit: 300,
+	limit: GENERAL_LIMIT,
 	standardHeaders: "draft-7",
 	legacyHeaders: false,
 	store: redisStore("rl:general:"),
 	keyGenerator: generalLimitKey,
 	passOnStoreError: true,
-	skip: (req) =>
-		isCredentialRoute(req) ||
-		req.originalUrl.startsWith("/api/v1/payment/callback"),
+	skip: skipsGeneralLimit,
 	message: tooManyRequests("Too many requests. Please try again later."),
 });
 
