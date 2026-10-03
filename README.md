@@ -758,8 +758,6 @@ quote one value that finds it.
 - [x] A carried balance is paid once; only the people who were there share a month
 - [x] Demo data: three messes, twelve members, three closed months
 
-Known limitations and what comes next: **[docs/ROADMAP.md](docs/ROADMAP.md)**.
-
 ---
 
 ## Submission
