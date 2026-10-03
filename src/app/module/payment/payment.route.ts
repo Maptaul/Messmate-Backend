@@ -52,6 +52,12 @@ router.post(
 );
 
 router.get(
+	"/bill-pdf/:billId",
+	auth(Role.ADMIN, Role.MESS_MANAGER, Role.MEMBER),
+	PaymentController.downloadBillPdf,
+);
+
+router.get(
 	"/my-payments",
 	auth(Role.MESS_MANAGER, Role.MEMBER),
 	PaymentController.getMyPayments,

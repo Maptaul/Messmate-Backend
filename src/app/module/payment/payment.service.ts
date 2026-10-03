@@ -13,6 +13,7 @@ import type {
 import config from "../../config";
 import type { IQuery } from "../../interfaces";
 import { executeBkashPayment, getBkashIdToken } from "../../lib/bkash";
+import { buildInvoicePdf } from "../../lib/pdf";
 import { prisma } from "../../lib/prisma";
 import {
 	getStripe,
@@ -23,7 +24,7 @@ import type { RequestUser } from "../../middleware/checkAuth";
 import { AppError } from "../../utils/AppError";
 import { writeAudit } from "../../utils/audit";
 import { checkMessAccess } from "../../utils/checkMessAccess";
-import { monthName } from "../../utils/months";
+import { monthName, taka } from "../../utils/months";
 import { sendPaymentReceipt } from "./payment.mail";
 import type {
 	IConfirmStripePaymentPayload,
@@ -647,6 +648,109 @@ const getSinglePayment = async (paymentId: string, user: RequestUser) => {
 	return payment;
 };
 
+// The same PDF the close-of-month email attaches, drawn from the stored bill.
+const getBillPdf = async (billId: string, user: RequestUser) => {
+	const bill = await prisma.memberBill.findUnique({
+		where: { id: billId },
+		select: {
+			id: true,
+			status: true,
+			memberId: true,
+			mealCount: true,
+			mealCost: true,
+			sharedCost: true,
+			rentShare: true,
+			totalPayable: true,
+			creditAmount: true,
+			paidAmount: true,
+			dueAmount: true,
+			createdAt: true,
+			cycle: { select: { year: true, month: true } },
+			member: {
+				select: {
+					messId: true,
+					mess: { select: { name: true } },
+					user: { select: { name: true } },
+				},
+			},
+		},
+	});
+
+	if (!bill) {
+		throw new AppError(httpStatus.NOT_FOUND, "Bill Not Found");
+	}
+
+	const membership = await checkMessAccess(bill.member.messId, user);
+
+	// A manager and an admin read the whole mess; a member only their own bill.
+	if (user.role === Role.MEMBER && membership?.id !== bill.memberId) {
+		throw new AppError(
+			httpStatus.FORBIDDEN,
+			"You Can Only Download Your Own Bill",
+		);
+	}
+
+	const mealCost = Number(bill.mealCost);
+	const sharedCost = Number(bill.sharedCost);
+	const rentShare = Number(bill.rentShare);
+	const totalPayable = Number(bill.totalPayable);
+	const dueAmount = Number(bill.dueAmount);
+	const rate = bill.mealCount > 0 ? mealCost / bill.mealCount : 0;
+	// Opening balance and the monthly advance are folded into the total.
+	const carriedAndAdvance = totalPayable - mealCost - sharedCost - rentShare;
+
+	const lines = [
+		{
+			label: `Meals (${bill.mealCount} x ${taka(rate)})`,
+			amount: taka(mealCost),
+		},
+		{ label: "Shared costs", amount: taka(sharedCost) },
+		{ label: "Rent share", amount: taka(rentShare) },
+		...(Math.abs(carriedAndAdvance) >= 0.01
+			? [
+					{
+						label: "Advance and carried balance",
+						amount: taka(carriedAndAdvance),
+					},
+				]
+			: []),
+		{ label: "Total payable", amount: taka(totalPayable), strong: true },
+		{
+			label: "Less deposits and bazaar paid",
+			amount: `- ${taka(bill.creditAmount)}`,
+		},
+		{ label: "Paid so far", amount: `- ${taka(bill.paidAmount)}` },
+	];
+
+	const totalLabel =
+		bill.status === BillStatus.CARRIED
+			? "Moved to next month's bill"
+			: dueAmount > 0
+				? "Due"
+				: dueAmount < 0
+					? "In credit"
+					: "Settled";
+
+	const period = `${monthName(bill.cycle.month)} ${bill.cycle.year}`;
+
+	const pdf = await buildInvoicePdf({
+		title: "Monthly Bill",
+		invoiceNumber: bill.id.slice(0, 8).toUpperCase(),
+		issuedOn: bill.createdAt.toISOString().slice(0, 10),
+		messName: bill.member.mess.name,
+		memberName: bill.member.user.name,
+		period,
+		lines,
+		totalLabel,
+		totalAmount: taka(Math.abs(dueAmount)),
+	});
+
+	return {
+		pdf,
+		fileName: `messmate-bill-${bill.cycle.year}-${String(bill.cycle.month).padStart(2, "0")}.pdf`,
+	};
+};
+
 const getCycleBills = async (
 	cycleId: string,
 	query: IQuery,
@@ -866,4 +970,5 @@ export const PaymentServices = {
 	confirmStripePayment,
 	getMyPayments,
 	getSinglePayment,
+	getBillPdf,
 };

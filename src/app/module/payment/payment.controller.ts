@@ -118,6 +118,18 @@ const getMyPayments = catchAsync(async (req: Request, res: Response) => {
 	});
 });
 
+// A file, not the JSON envelope: the browser saves it as the bill's PDF.
+const downloadBillPdf = catchAsync(async (req: Request, res: Response) => {
+	const billId = req.params.billId as string;
+	const user = req.user!;
+
+	const { pdf, fileName } = await PaymentServices.getBillPdf(billId, user);
+
+	res.setHeader("Content-Type", "application/pdf");
+	res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+	res.send(pdf);
+});
+
 const getSinglePayment = catchAsync(async (req: Request, res: Response) => {
 	const paymentId = req.params.paymentId as string;
 	const user = req.user!;
@@ -143,4 +155,5 @@ export const PaymentController = {
 	paymentResult,
 	getMyPayments,
 	getSinglePayment,
+	downloadBillPdf,
 };
