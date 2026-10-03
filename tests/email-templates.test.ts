@@ -278,7 +278,7 @@ test("the headcount tells the manager what to cook and who was a default", async
 		],
 	});
 
-	assert.match(html, /Friday 18 Sept — who’s eating/);
+	assert.match(html, /Friday 18 Sept: who’s eating/);
 	assert.match(html, /Lunch<\/div>\s*<div[^>]*>7\.5</);
 	assert.match(html, /Dinner<\/div>\s*<div[^>]*>8</);
 	assert.match(html, /L 0\.5 · D 1 · default/);

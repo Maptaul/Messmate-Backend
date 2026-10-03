@@ -1,7 +1,7 @@
 <%
   var pending = locals.managerPending;
   var runLine = pending
-    ? 'Your request to run ' + locals.messName + ' is with the admin. We’ll email you when it’s reviewed — until then you can use MessMate as a member.'
+    ? 'Your request to run ' + locals.messName + ' is with the admin. We’ll email you when it’s reviewed. Until then you can use MessMate as a member.'
     : 'Running a mess yourself? Ask to become a manager from your profile, and an admin will review it.';
 %>
 <%- include('partials/email', {

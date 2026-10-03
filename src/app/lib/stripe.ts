@@ -30,7 +30,7 @@ export interface IStripeSessionFacts {
 }
 
 // A session settles a bill only when Stripe says it is paid, in BDT, for exactly
-// the amount the Payment row was opened for — the same three checks the bKash
+// the amount the Payment row was opened for - the same three checks the bKash
 // callback makes before it touches a bill.
 export const isStripeSessionSettleable = (
 	session: IStripeSessionFacts,

@@ -4079,7 +4079,7 @@
     },
     {
       "name": "Admin",
-      "description": "Platform administration — everything here is ADMIN only, because none of it is about one mess.\n\nThe two state-changing pairs (role there and back, block then unblock) are deliberately round trips: leaving the demo member promoted or blocked would break every request after this folder. If a run stops between the two halves of a pair, re-run the second half by hand.",
+      "description": "Platform administration. Everything here is ADMIN only, because none of it is about one mess.\n\nThe two state-changing pairs (role there and back, block then unblock) are deliberately round trips: leaving the demo member promoted or blocked would break every request after this folder. If a run stops between the two halves of a pair, re-run the second half by hand.",
       "item": [
         {
           "name": "Dashboard stats",
@@ -4103,7 +4103,7 @@
                 "dashboard-stats"
               ]
             },
-            "description": "Platform health in one call: users by role, blocked count, messes and active memberships, open and closed cycles, and the money — deposits taken, expenses recorded, payments actually settled through bKash, and what is still outstanding across every unpaid bill.\n\nEvery figure is a count or a sum with an index behind it, and they run together rather than in sequence."
+            "description": "Platform health in one call: users by role, blocked count, messes and active memberships, open and closed cycles, and the money: deposits taken, expenses recorded, payments actually settled through bKash, and what is still outstanding across every unpaid bill.\n\nEvery figure is a count or a sum with an index behind it, and they run together rather than in sequence."
           }
         },
         {
@@ -4374,7 +4374,7 @@
                 "status"
               ]
             },
-            "description": "Writes `USER_UNBLOCKED`. Run this even if you ran the block by hand — every request below this folder logs in as that member."
+            "description": "Writes `USER_UNBLOCKED`. Run this even if you ran the block by hand, since every request below this folder logs in as that member."
           }
         },
         {
@@ -4409,7 +4409,7 @@
                 }
               ]
             },
-            "description": "Everything money- or permission-shaped is written here as it happens — cycle closed and reopened, member removed, expense and deposit deleted, payment settled, role changed, user blocked and unblocked — each with the actor and the before/after state.\n\nFilterable by `action`, `entity`, `entityId` and `actorId`."
+            "description": "Everything money- or permission-shaped is written here as it happens (cycle closed and reopened, member removed, expense and deposit deleted, payment settled, role changed, user blocked and unblocked), each with the actor and the before/after state.\n\nFilterable by `action`, `entity`, `entityId` and `actorId`."
           }
         },
         {
@@ -4479,7 +4479,7 @@
                 "role"
               ]
             },
-            "description": "A demoted manager keeps owning the mess row but loses every route that maintains it — the month could no longer be closed and the ledger would sit there unfinishable. Hand the mess over or delete it first.\n\nThe matching rule for blocking: a manager cannot be blocked while one of their messes has an OPEN cycle, because nobody else can record the meals or close it."
+            "description": "A demoted manager keeps owning the mess row but loses every route that maintains it, so the month could no longer be closed and the ledger would sit there unfinishable. Hand the mess over or delete it first.\n\nThe matching rule for blocking: a manager cannot be blocked while one of their messes has an OPEN cycle, because nobody else can record the meals or close it."
           }
         }
       ]

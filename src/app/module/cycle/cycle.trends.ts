@@ -4,7 +4,7 @@ import { dueAt, type TTrendBill } from "../admin/admin.trends";
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DHAKA_OFFSET_MS = 6 * 60 * 60 * 1000;
 
-/** Split equally on every bill — what the overview calls "shared bills". */
+/** Split equally on every bill - what the overview calls "shared bills". */
 const SHARED_TYPES: ExpenseType[] = [
 	"MAID",
 	"GAS",
@@ -48,7 +48,7 @@ const dhakaDay = (moment: Date) => {
 const toPaisa = (taka: number) => Math.round(taka * 100);
 
 /**
- * One value per day of the month so far — not running totals; the client
+ * One value per day of the month so far - not running totals; the client
  * accumulates what it needs (a running meal rate is running grocery over
  * running meals).
  */

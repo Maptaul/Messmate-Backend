@@ -1,7 +1,7 @@
-# MessMate — Entity Relationship Diagram
+# MessMate - Entity Relationship Diagram
 
 15 models, one per schema file under `prisma/schema/`, and all 28 of their
-relations. The diagram is written by hand, so it can drift from the schema — it
+relations. The diagram is written by hand, so it can drift from the schema - it
 was last checked foreign key by foreign key: every `@relation` in
 `prisma/schema/` is drawn below, and every line below is a real `@relation`.
 
@@ -164,7 +164,7 @@ Three relationships carry most of the design:
 
 - **`MessMember` sits between `User` and `Mess`.** One person can live in more
   than one mess, and every meal, expense and bill hangs off the membership
-  rather than the user — so someone who leaves keeps their history in the months
+  rather than the user - so someone who leaves keeps their history in the months
   they were there.
 - **`BillingCycle` owns the month.** Meals, plans, expenses, deposits and duty
   all belong to a cycle, which is what makes closing the month a single,
@@ -177,7 +177,7 @@ Three relationships carry most of the design:
 **Joining is a request, not a status.** `MembershipRequest` holds every
 invitation (`kind: INVITE`) and every request to join (`kind: REQUEST`) until
 it is answered. A pending person is deliberately not a `MessMember`: a dozen
-reads — meals, deposits, duty, the settlement — only check `isDeleted`, so a
+reads - meals, deposits, duty, the settlement - only check `isDeleted`, so a
 "pending" member there would quietly be billed. Only an accepted request creates
 the membership, or reactivates a `LEFT` one. `createdById` and `decidedById` are
 plain ids, not relations: who asked and who answered is history, and must
@@ -204,7 +204,7 @@ An `AuditLog` row answers three questions, and each has its own column:
 The two optional columns are what let the same table serve three readers. The
 platform admin reads everything. A manager reads the rows where `messId` is
 theirs. A member reads only the rows where `subjectMemberId` is their own
-membership — the meal a manager recorded against them, a deposit of theirs
+membership - the meal a manager recorded against them, a deposit of theirs
 deleted, a payment of theirs settled.
 
 Closing or reopening a cycle touches every member at once, so it carries a
@@ -239,13 +239,13 @@ due.
 
 Most children cascade from `BillingCycle`, so removing a mess removes the months
 under it rather than leaving orphans. `Payment` cascades from its `MemberBill`,
-because reopening a cycle deletes the bills so the settlement can be regenerated
-— a settled payment never reaches that path, since reopen is refused once any
+because reopening a cycle deletes the bills so the settlement can be regenerated.
+A settled payment never reaches that path, since reopen is refused once any
 payment lands against the month.
 
 `AuditLog` cascades from its `Mess` and its subject `MessMember`, so a deleted
-mess takes its trail with it. Its `actorId` does the opposite — `ON DELETE
-RESTRICT` — so the database refuses to remove a user who has acted while that
+mess takes its trail with it. Its `actorId` does the opposite - `ON DELETE
+RESTRICT` - so the database refuses to remove a user who has acted while that
 trail exists. The same holds for whoever recorded a deposit or an expense: a
 record of who did something is worth nothing if deleting them could erase it. In
 practice it never comes up, because accounts are soft-deleted and the row stays.
@@ -259,8 +259,8 @@ a closed month has to survive losing the name of whoever closed it.
 Nothing is hard-deleted through the API. `isDeleted` + `deletedAt` mark a row and
 every read filters them out.
 
-Money is `Decimal`, never `Float`. Meal counts are the one deliberate `Float` —
+Money is `Decimal`, never `Float`. Meal counts are the one deliberate `Float`:
 `MealEntry.lunch`/`.dinner`, `MealPlan.lunch`/`.dinner`,
 `MemberBill.mealCount` and `BillingCycle.totalMeals`: a real register records
 half meals, and multiples of `0.5` are exact in binary floating point, so nothing
-drifts. Validation enforces that step — a mess has half meals, not thirds.
+drifts. Validation enforces that step - a mess has half meals, not thirds.

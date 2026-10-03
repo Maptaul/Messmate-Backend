@@ -35,7 +35,7 @@ const toPaisa = (taka: number) => Math.round(taka * 100);
 
 /**
  * What a bill still owed at `at`: its payable after credits, less every
- * payment made by then — never below zero, a credit owes nothing.
+ * payment made by then - never below zero, a credit owes nothing.
  */
 export const dueAt = (bill: TTrendBill, at: Date) => {
 	if (bill.createdAt > at) {
