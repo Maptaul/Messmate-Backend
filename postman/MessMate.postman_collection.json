@@ -3018,6 +3018,47 @@
           ]
         },
         {
+          "name": "Download my bill as a PDF (Member)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"a PDF file\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/pdf\");",
+                  "  pm.expect(pm.response.headers.get(\"Content-Disposition\")).to.include(\"attachment\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{memberToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payment/bill-pdf/{{billId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payment",
+                "bill-pdf",
+                "{{billId}}"
+              ]
+            },
+            "description": "The same PDF the close-of-month email attaches, drawn from the stored bill. A member gets only their own bill (403 otherwise); a manager or admin any bill in the mess. Save the response as a file."
+          }
+        },
+        {
           "name": "Get my bills (Manager) - the manager gets one too",
           "request": {
             "method": "GET",

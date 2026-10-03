@@ -3,7 +3,7 @@
 **Base URL:** `https://messmatebackend.vercel.app`
 **Local:** `http://localhost:5000`
 
-92 endpoints across 16 modules, all versioned under `/api/v1`. The runnable version of this reference is `postman/MessMate.postman_collection.json` — 141
+93 endpoints across 16 modules, all versioned under `/api/v1`. The runnable version of this reference is `postman/MessMate.postman_collection.json` — 142
 requests that chain their own tokens and ids.
 
 ---
@@ -237,6 +237,7 @@ manager the address is not registered; and rejoining resets `joinedAt`.
 | POST | `/api/v1/payment/create-stripe-session` | `MESS_MANAGER` `MEMBER` | yes | card payment, returns `checkoutUrl` |
 | POST | `/api/v1/payment/confirm-stripe` | `MESS_MANAGER` `MEMBER` | yes | `{ sessionId }` from the success redirect |
 | GET | `/api/v1/payment/cycle-bills/:cycleId` | `ADMIN` `MESS_MANAGER` | — | every bill in one cycle |
+| GET | `/api/v1/payment/bill-pdf/:billId` | `ADMIN` `MESS_MANAGER` `MEMBER` | — | the bill as a PDF file (`Content-Disposition: attachment`); a member only their own, a manager their mess's |
 | POST | `/api/v1/payment/record-cash-payment` | `ADMIN` `MESS_MANAGER` | yes | cash handed to the manager |
 | GET | `/api/v1/payment/my-payments` | `MESS_MANAGER` `MEMBER` | — |  |
 | GET | `/api/v1/payment/:paymentId` | `ADMIN` `MESS_MANAGER` `MEMBER` | — |  |

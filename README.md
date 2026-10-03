@@ -412,7 +412,10 @@ The itemisation comes from `sharedBreakdown` on the settlement result, so it is
 computed, not typed. A mess that records nothing but groceries still gets the
 single shared line.
 
-A settled payment — bKash or cash — sends the same document as a receipt.
+A settled payment — bKash or cash — sends the same document as a receipt, and
+`GET /payment/bill-pdf/:billId` returns a bill as that PDF for download: a member
+their own, a manager any bill in their mess. It is drawn from the stored bill, so
+the shared costs are one line rather than itemised.
 
 ---
 
@@ -640,7 +643,7 @@ against the production database after any schema change.
 
 ## Postman
 
-`postman/MessMate.postman_collection.json` — **141 requests across 20 folders**.
+`postman/MessMate.postman_collection.json` — **142 requests across 20 folders**.
 `baseUrl` already points at the live API, so importing and running it needs no
 edits.
 
@@ -673,6 +676,9 @@ Run through newman against the deployed API on 2 October 2026:
 ```
 requests 141 | failed 0 | assertions 67 | failed 0
 ```
+
+The bill PDF request was added on 3 October and checked against a local server: the
+member's own bill comes back as a PDF attachment, another member's is `403`.
 
 Every error case answered the status in its name. A few steps cannot be
 automated and answer an error until done by hand: the OTPs for verify-email and
@@ -736,7 +742,7 @@ quote one value that finds it.
 - [x] bKash payment + idempotent callback
 - [x] Stripe card payments (test mode), confirmed server-side
 - [x] Admin operations — users, roles, block/unblock, audit logs, dashboard stats
-- [x] Postman collection — 141 requests, verified end to end
+- [x] Postman collection — 142 requests, verified end to end
 - [x] Deployment
 - [x] Demo video
 - [x] Half meals, deposit-funded groceries, the August 2026 ledger as a test
