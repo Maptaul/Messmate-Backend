@@ -25,11 +25,14 @@ declare global {
 
 export const auth = (...requiredRoles: Role[]) => {
 	return catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-		const token = req.cookies.accessToken
-			? req.cookies.accessToken
-			: req.headers.authorization?.startsWith("Bearer ")
-				? req.headers.authorization?.split(" ")[1]
-				: req.headers.authorization;
+		// An explicit Authorization header wins over the cookie: API clients like
+		// Postman keep the last login's cookie, which would otherwise silently
+		// override the token the request actually sent.
+		const headerToken = req.headers.authorization?.startsWith("Bearer ")
+			? req.headers.authorization.split(" ")[1]
+			: req.headers.authorization;
+
+		const token = headerToken || req.cookies.accessToken;
 
 		if (!token) {
 			throw new AppError(

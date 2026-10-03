@@ -1,8 +1,10 @@
 import type { NextFunction, Request, Response } from "express";
 import httpStatus from "http-status";
+import { MulterError } from "multer";
 import { ZodError } from "zod";
 import { Prisma } from "../../generated/prisma/client";
 import config from "../config";
+import { MAX_FILE_SIZE_IN_MB } from "../lib/multer";
 import { AppError } from "../utils/AppError";
 
 type TErrorSource = {
@@ -40,6 +42,13 @@ export const globalErrorHandler = async (
 		statusCode = err.statusCode;
 		errorMessage = err.message;
 		isKnownError = true;
+	} else if (err instanceof MulterError) {
+		statusCode = httpStatus.BAD_REQUEST;
+		isKnownError = true;
+		errorMessage =
+			err.code === "LIMIT_FILE_SIZE"
+				? `File size exceeds ${MAX_FILE_SIZE_IN_MB}MB`
+				: err.message;
 	} else if (err instanceof Prisma.PrismaClientValidationError) {
 		statusCode = httpStatus.BAD_REQUEST;
 		errorMessage = "You have provided incorrect field type or missing fields";

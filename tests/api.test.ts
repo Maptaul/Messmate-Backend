@@ -5,9 +5,9 @@ import { after, before, test } from "node:test";
 
 import app from "../src/app";
 import config from "../src/app/config";
-import { seedSuperAdmin } from "../src/app/utils/seed";
 import { prisma } from "../src/app/lib/prisma";
 import { redisClient } from "../src/app/lib/redis";
+import { seedSuperAdmin } from "../src/app/utils/seed";
 
 let server: http.Server;
 let baseUrl: string;
@@ -140,7 +140,11 @@ test("the payment result page is public and returns html", async () => {
 	assert.match(body, /Payment received/);
 });
 
-test("a list endpoint clamps the page size it is asked for", async () => {
+let adminToken: string | undefined;
+
+const loginAsAdmin = async () => {
+	if (adminToken) return adminToken;
+
 	await seedSuperAdmin();
 
 	const login = await api("/api/v1/auth/login", {
@@ -154,7 +158,13 @@ test("a list endpoint clamps the page size it is asked for", async () => {
 
 	assert.equal(login.status, 200, "the seeded admin should be able to log in");
 
-	const token = (await login.json()).data.accessToken;
+	adminToken = (await login.json()).data.accessToken as string;
+
+	return adminToken;
+};
+
+test("a list endpoint clamps the page size it is asked for", async () => {
+	const token = await loginAsAdmin();
 
 	const meta = async (query: string) => {
 		const res = await api(`/api/v1/mess/all-messes?${query}`, {
@@ -170,7 +180,11 @@ test("a list endpoint clamps the page size it is asked for", async () => {
 	assert.equal((await meta("limit=0")).limit, 10, "zero falls back");
 	assert.equal((await meta("limit=abc")).limit, 10, "junk falls back");
 	assert.equal((await meta("limit=7.9")).limit, 7, "fractional floors");
-	assert.equal((await meta("limit=-5")).limit, 1, "negative never reaches take");
+	assert.equal(
+		(await meta("limit=-5")).limit,
+		1,
+		"negative never reaches take",
+	);
 
 	const negativePage = await meta("page=-3&limit=5");
 
@@ -180,6 +194,53 @@ test("a list endpoint clamps the page size it is asked for", async () => {
 
 	assert.equal(normal.limit, 25, "a sensible limit passes through");
 	assert.equal(normal.page, 2, "a sensible page passes through");
+});
+
+test("an Authorization header wins over a stale cookie", async () => {
+	const token = await loginAsAdmin();
+
+	const res = await api("/api/v1/auth/me", {
+		headers: {
+			authorization: `Bearer ${token}`,
+			cookie: "accessToken=left-over-from-another-login",
+		},
+	});
+
+	assert.equal(res.status, 200);
+});
+
+const uploadAvatar = async (file: Blob, name: string) => {
+	const form = new FormData();
+
+	form.append("avatar", file, name);
+
+	const res = await api("/api/v1/user/profile-image", {
+		method: "PATCH",
+		headers: { authorization: `Bearer ${await loginAsAdmin()}` },
+		body: form,
+	});
+
+	return { status: res.status, message: (await res.json()).message as string };
+};
+
+test("an upload of a type the API does not take is a 400", async () => {
+	const { status, message } = await uploadAvatar(
+		new Blob(["<script>alert(1)</script>"], { type: "text/html" }),
+		"page.html",
+	);
+
+	assert.equal(status, 400);
+	assert.match(message, /File type not allowed: page\.html/);
+});
+
+test("a file over the size limit is a 400, not a 500", async () => {
+	const { status, message } = await uploadAvatar(
+		new Blob([new Uint8Array(4 * 1024 * 1024 + 1)], { type: "image/png" }),
+		"big.png",
+	);
+
+	assert.equal(status, 400);
+	assert.match(message, /File size exceeds 4MB/);
 });
 
 test("helmet is doing its job", async () => {
