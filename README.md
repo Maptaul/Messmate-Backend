@@ -361,9 +361,11 @@ and refresh flow and caches both tokens in Redis (id token 1 h, refresh token
 28 days). Sandbox versus live is `BKASH_BASE_URL`, not a code branch.
 
 After checkout, bKash sends the payer to `PAYMENT_RESULT_URL?status=…` - the
-frontend's `/payment/success` page. Without it the API falls back to its own
-small result page at `GET /payment/result`. Settlement happens server-side either
-way; the page only reports what already happened.
+frontend's `/payment/success` page. A success also carries `&paymentId=`, our own
+id, so the page reads the payment back from the API before it says "received".
+Without the URL the API falls back to its own small result page at
+`GET /payment/result`. Settlement happens server-side either way; the page only
+reports what already happened.
 
 **Card payments go through Stripe Checkout (test mode).**
 `POST /payment/create-stripe-session { billId }` commits a Payment row for the

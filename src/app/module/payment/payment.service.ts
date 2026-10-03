@@ -322,10 +322,17 @@ const settlePayment = async (
 };
 
 const paymentCallback = async (query: Record<string, unknown>) => {
-	const redirectTo = (status: string) =>
-		config.payment_result_url
-			? `${config.payment_result_url}?status=${status}`
-			: `${config.backend_url}/api/v1/payment/result?status=${status}`;
+	// A success carries our payment id, so the result page can confirm it with
+	// the API instead of trusting the status in its own URL.
+	const redirectTo = (status: string, paymentId?: string) => {
+		const query = paymentId
+			? `status=${status}&paymentId=${paymentId}`
+			: `status=${status}`;
+
+		return config.payment_result_url
+			? `${config.payment_result_url}?${query}`
+			: `${config.backend_url}/api/v1/payment/result?${query}`;
+	};
 
 	const paymentID = typeof query.paymentID === "string" ? query.paymentID : "";
 	const status = typeof query.status === "string" ? query.status : "";
@@ -351,7 +358,7 @@ const paymentCallback = async (query: Record<string, unknown>) => {
 	}
 
 	if (payment.status === PaymentStatus.PAID) {
-		return { redirectUrl: redirectTo("success") };
+		return { redirectUrl: redirectTo("success", payment.id) };
 	}
 
 	if (status === "cancel" || status === "failure") {
@@ -412,7 +419,7 @@ const paymentCallback = async (query: Record<string, unknown>) => {
 		await sendPaymentReceipt(payment.id);
 	}
 
-	return { redirectUrl: redirectTo("success") };
+	return { redirectUrl: redirectTo("success", payment.id) };
 };
 
 const createStripeSession = async (

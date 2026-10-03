@@ -444,7 +444,8 @@ MEMBER -> POST /api/v1/payment/create-payment { billId }
 
 bKash  -> GET /api/v1/payment/callback?paymentID=...&status=...
           always calls tokenized/checkout/execute and verifies before settling
-          -> 302 redirect back to the frontend
+          -> 302 redirect back to the frontend, ?status=success&paymentId=<our id>
+             (the page reads that payment back before it shows "received")
 ```
 
 ### Paying by card (Stripe, test mode)
