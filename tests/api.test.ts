@@ -243,6 +243,10 @@ test("a file over the size limit is a 400, not a 500", async () => {
 	assert.match(message, /File size exceeds 4MB/);
 });
 
+test("a dropped redis connection is logged, not fatal", () => {
+	assert.ok(redisClient.listenerCount("error") > 0);
+});
+
 test("helmet is doing its job", async () => {
 	const res = await api("/");
 

@@ -10,6 +10,12 @@ export const redisClient = createClient({
 	},
 });
 
+// node-redis throws an unlistened "error" event and the process exits; with a
+// listener a dropped connection is logged and the client reconnects itself.
+redisClient.on("error", (error) => {
+	console.error("[redis]", error);
+});
+
 let connecting: Promise<unknown> | null = null;
 
 export const ensureRedis = async () => {
