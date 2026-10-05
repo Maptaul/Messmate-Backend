@@ -50,6 +50,8 @@ jobs:
       SUPER_ADMIN_NAME: CI Admin
       SUPER_ADMIN_EMAIL: ci-admin@messmate.test
       SUPER_ADMIN_PASSWORD: CiAdmin@12345
+      # Without it the cron routes answer 503 (not configured) instead of 401.
+      CRON_SECRET: ci-cron-secret
 
     steps:
       - uses: actions/checkout@v4
