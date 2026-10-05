@@ -7,6 +7,11 @@ export const redisClient = createClient({
 	socket: {
 		host: config.redis_host,
 		port: Number(config.redis_port),
+		connectTimeout: 5000,
+		// A few quick retries, then give up: an unreachable Redis must fail the
+		// call (the rate limiter and the cache fall back) rather than hang it.
+		reconnectStrategy: (retries) =>
+			retries >= 3 ? new Error("Redis is unreachable") : retries * 200,
 	},
 });
 
