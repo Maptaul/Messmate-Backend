@@ -5,7 +5,7 @@ meals, the manager records groceries and utility bills, and at month end the
 system computes every member's share and lets them settle it through **bKash**
 or a card (**Stripe**), or hand the manager cash.
 
-**Live API:** <https://messmatebackend.vercel.app> · **[API Reference](docs/API.md)** · **[Postman collection](postman/MessMate.postman_collection.json)** · **Frontend:** <https://github.com/Maptaul/Messmate-frontend>
+**Live API:** <https://messmatebackend.vercel.app> · **Live app:** <https://meassmate.vercel.app> · **[API Reference](docs/API.md)** · **[Postman collection](postman/MessMate.postman_collection.json)** · **Frontend:** <https://github.com/Maptaul/Messmate-frontend>
 
 Our own 8-person mess in Chattogram keeps this ledger by hand every month: who
 ate how many meals, who did the grocery run, who paid the gas and electricity
@@ -769,7 +769,9 @@ Project Name    : MessMate - Smart Mess & Shared Housing Management Platform
 Backend Repo    : https://github.com/Maptaul/Messmate-Backend
 Frontend Repo   : https://github.com/Maptaul/Messmate-frontend
 Live API        : https://messmatebackend.vercel.app
+Live Frontend   : https://meassmate.vercel.app
 API Docs        : https://github.com/Maptaul/Messmate-Backend/blob/main/docs/API.md
-Demo Video      : https://www.loom.com/share/be92f0b77582452e86a86ddcceb4bcdd
+Demo Video      : https://www.loom.com/share/be92f0b77582452e86a86ddcceb4bcdd (API, B7A6)
+Frontend Video  : https://www.loom.com/share/e36fa18e452f43ac84cd7d802f9706f9 (web app, B7A7)
 Admin Email     : admin@messmate.app
 ```
